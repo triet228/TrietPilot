@@ -71,6 +71,13 @@ int doubleValidator(ImGuiInputTextCallbackData *data);
 int ipValidator(ImGuiInputTextCallbackData *data);
 int nonWhitespaceValidator(ImGuiInputTextCallbackData *data);
 
+#ifdef __APPLE__
+constexpr const char *MOD_KEY = "Cmd";
+#else
+constexpr const char *MOD_KEY = "Ctrl";
+#endif
+inline std::string shortcut(const char *keys) { return std::string(MOD_KEY) + "+" + keys; }
+
 // Use ItemInnerSpacing between related buttons and ItemSpacing between groups.
 bool iconButton(const char *id, const char *icon, const char *tooltip = nullptr);
 float iconButtonWidth();
