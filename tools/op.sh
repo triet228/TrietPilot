@@ -14,9 +14,9 @@ UNDERLINE='\033[4m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-SHELL_NAME="$(basename ${SHELL})"
-RC_FILE="${HOME}/.$(basename ${SHELL})rc"
-if [ "$(uname)" == "Darwin" ] && [ $SHELL == "/bin/bash" ]; then
+SHELL_NAME="$(basename "${SHELL}")"
+RC_FILE="${HOME}/.$(basename "${SHELL}")rc"
+if [ "$(uname)" == "Darwin" ] && [ "$SHELL" == "/bin/bash" ]; then
   RC_FILE="$HOME/.bash_profile"
 fi
 
@@ -250,7 +250,7 @@ function op_venv() {
   case $SHELL_NAME in
     "zsh")
       ZSHRC_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'tmp_zsh')
-      echo "source \"$RC_FILE\"; source \"$OPENPILOT_ROOT/.venv/bin/activate\"" >> $ZSHRC_DIR/.zshrc
+      echo "source \"$RC_FILE\"; source \"$OPENPILOT_ROOT/.venv/bin/activate\"" >> "$ZSHRC_DIR/.zshrc"
       ZDOTDIR=$ZSHRC_DIR zsh ;;
     *)
       bash --rcfile <(echo "source \"$RC_FILE\"; source \"$OPENPILOT_ROOT/.venv/bin/activate\"") ;;
@@ -405,14 +405,14 @@ function op_start() {
   if [[ -f "/AGNOS" ]]; then
     op_before_cmd
     op_check_agnos_update
-    op_run_command sudo systemctl restart comma $@
+    op_run_command sudo systemctl restart comma "$@"
   fi
 }
 
 function op_stop() {
   if [[ -f "/AGNOS" ]]; then
     op_before_cmd
-    op_run_command sudo systemctl stop comma $@
+    op_run_command sudo systemctl stop comma "$@"
   fi
 }
 
