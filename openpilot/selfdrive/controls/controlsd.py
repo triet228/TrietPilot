@@ -95,11 +95,16 @@ class Controls:
     CC = car.CarControl.new_message()
     CC.enabled = self.sm['selfdriveState'].enabled
 
-    # Check which actuators can be enabled
+    # Check which actuators can be enabled. A driver override on one axis only pauses
+    # that axis: steering input hands over lateral control while gas/brake stay
+    # automated, and vice versa. Both resume as soon as the driver lets go, since the
+    # override events come straight from carState each frame.
+    override_lateral = any(e.overrideLateral for e in self.sm['onroadEvents'])
+    override_longitudinal = any(e.overrideLongitudinal for e in self.sm['onroadEvents'])
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, 0.3) or CS.standstill
     CC.latActive = self.sm['selfdriveState'].active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
-                   (not standstill or self.CP.steerAtStandstill)
-    CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
+                   (not standstill or self.CP.steerAtStandstill) and not override_lateral
+    CC.longActive = CC.enabled and not override_longitudinal and self.CP.openpilotLongitudinalControl
 
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state

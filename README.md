@@ -7,6 +7,7 @@ It runs on a [comma](https://comma.ai) device and lets AI drive the car.
 ## Features Triet added
 
 - **Automatic incident preservation.** The dashcam keeps footage on its own when something happens: hard braking, an impact, a forward collision or AEB warning, or the panda dropping out. No need to press the bookmark button.
+- **Per-axis driver override.** Turning the wheel pauses only steering while gas and brake stay automated. Pressing the gas pauses only gas and brake while steering stays automated. Let go and TrietPilot takes everything back. Pressing the brake still disengages fully because the panda safety firmware enforces that.
 - **Smooth stop and go.** In traffic the car waits until the lead has actually moved before launching, eases into the throttle instead of lurching, settles into the brake hold gently, and tapers the final approach to a stop. The relaxed personality is now noticeably softer than standard.
 
 ## Upstream
