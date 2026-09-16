@@ -60,6 +60,18 @@ def map_speed_cap_from_payload(raw):
   return min(caps) if caps else None
 
 
+def nav_speed_cap_from_payload(raw):
+  """Turn speed cap in kph from the navd payload, or None when not routing or absent."""
+  try:
+    payload = json.loads(bytes(raw))
+  except (ValueError, TypeError):
+    return None
+  if not payload.get("active"):
+    return None
+  v = payload.get("turn_speed_kph")
+  return float(v) if isinstance(v, (int, float)) else None
+
+
 def get_max_accel(v_ego):
   return np.interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
 
@@ -102,6 +114,7 @@ class LongitudinalPlanner:
     self.tuning = tuning_for(CP)
     self.stop_profile = StopProfile(self.dt, self.tuning["stop_a_firm"], self.tuning["stop_a_release"])
     self.map_speed_cap_kph = None
+    self.nav_speed_cap_kph = None
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -126,6 +139,13 @@ class LongitudinalPlanner:
       self.map_speed_cap_kph = None
     if self.map_speed_cap_kph is not None:
       v_cruise = min(v_cruise, self.map_speed_cap_kph * CV.KPH_TO_MS)
+    # navigation turn cap from navd: slows ahead of the next turn on an active route
+    if sm.updated['customReservedRawData2']:
+      self.nav_speed_cap_kph = nav_speed_cap_from_payload(sm['customReservedRawData2'])
+    if not sm.alive['customReservedRawData2']:
+      self.nav_speed_cap_kph = None
+    if self.nav_speed_cap_kph is not None:
+      v_cruise = min(v_cruise, self.nav_speed_cap_kph * CV.KPH_TO_MS)
 
     long_control_off = sm['controlsState'].longControlState == LongCtrlState.off
 

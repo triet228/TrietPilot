@@ -13,9 +13,15 @@ on customReservedRawData2 for the HUD banner:
   {"active": true, "status": "routing", "dest": "Home",
    "maneuver": "turn", "modifier": "left", "street": "Packard Street",
    "distance_m": 230.0, "remaining_m": 5400.0, "eta_s": 480.0,
-   "next": {"maneuver": "arrive", "modifier": "", "street": "", "distance_m": 900.0}}
+   "next": {"maneuver": "arrive", "modifier": "", "street": "", "distance_m": 900.0},
+   "turn_speed_kph": 58.3}
 
 status is one of: idle, no_gps, routing, off_route, no_route, arrived.
+
+turn_speed_kph is the speed cap from turn_speed.py for the maneuvers ahead, present
+only while routing with a corner within reach; the longitudinal planner takes the
+minimum of it and the set speed so the car arrives at the turn already slowed down.
+Turn it off with the NavTurnSlowdown param.
 No network access anywhere: the map is a file in this repo.
 """
 
@@ -30,6 +36,8 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.navd.offline_map import OfflineMap, haversine
 from openpilot.selfdrive.navd.router import find_route, snap
 from openpilot.selfdrive.navd.speedlimitd import latest_fix, MIN_BEARING_SPEED
+from openpilot.selfdrive.navd.curve_speed import CurveSpeedFilter
+from openpilot.selfdrive.navd.turn_speed import turn_speed
 
 RATE = 2
 OFF_ROUTE_DIST = 40.0      # m from the route polyline before the car counts as off route
@@ -114,6 +122,8 @@ class Navigator:
     self.off_route_since = None
     self.last_route_attempt = 0.0
     self.arrived_at = None
+    self.turn_slowdown = True
+    self.turn_filter = CurveSpeedFilter(1.0 / RATE)
 
   def _clear(self, status="idle"):
     self.route = None
@@ -195,11 +205,18 @@ class Navigator:
     return self.payload()
 
   def payload(self):
+    routing = self.tracker is not None and self.status == "routing" and self.dest is not None
+    # the filter lets the cap drop at once but rise only slowly, so the throttle does not surge after a turn
+    v_turn = turn_speed(self.tracker.upcoming(), self.tracker.dist_along) if routing and self.turn_slowdown else None
+    v_turn = self.turn_filter.update(v_turn)
+
     if self.status == "arrived":
       return {"active": True, "status": "arrived", "dest": self.dest["name"] if self.dest else ""}
     if self.dest is None or self.status == "idle":
       return {"active": False, "status": "idle"}
     p = {"active": True, "status": self.status, "dest": self.dest["name"]}
+    if v_turn is not None:
+      p["turn_speed_kph"] = round(v_turn * 3.6, 1)
     if self.tracker is not None:
       ups = self.tracker.upcoming()
       p["remaining_m"] = self.tracker.remaining_m()
@@ -231,6 +248,8 @@ def main():
 
   while True:
     sm.update(0)
+    if rk.frame % RATE == 0:
+      nav.turn_slowdown = params.get_bool("NavTurnSlowdown")
     payload = nav.update(latest_fix(sm), time.monotonic())
     msg = messaging.new_message("customReservedRawData2", valid=True)
     msg.customReservedRawData2 = json.dumps(payload, separators=(",", ":")).encode()
