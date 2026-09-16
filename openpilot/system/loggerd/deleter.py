@@ -10,6 +10,9 @@ from openpilot.system.loggerd.xattr_cache import getxattr
 
 MIN_BYTES = 5 * 1024 * 1024 * 1024
 MIN_PERCENT = 10
+# hard cap on everything under the log root, so footage never grows to the point where
+# the filesystem itself runs out. 80 GB is roughly 13 hours of driving with all cameras.
+MAX_LOG_BYTES = 80 * 1024 * 1024 * 1024
 
 DELETE_LAST = ['boot', 'crash']
 
@@ -45,10 +48,23 @@ def get_preserved_segments(dirs_by_creation: list[str]) -> set[str]:
   return preserved
 
 
+def get_log_root_bytes() -> int:
+  """Total size of every file under the log root. A few thousand stats every 30 s, cheap enough."""
+  total = 0
+  for root, _, files in os.walk(Paths.log_root()):
+    for f in files:
+      try:
+        total += os.stat(os.path.join(root, f)).st_size
+      except OSError:
+        pass
+  return total
+
+
 def deleter_step() -> tuple[bool, str | None]:
   out_of_bytes = get_available_bytes(default=MIN_BYTES + 1) < MIN_BYTES
   out_of_percent = get_available_percent(default=MIN_PERCENT + 1) < MIN_PERCENT
-  out_of_space = out_of_percent or out_of_bytes
+  over_cap = get_log_root_bytes() > MAX_LOG_BYTES
+  out_of_space = out_of_percent or out_of_bytes or over_cap
   if not out_of_space:
     return False, None
 

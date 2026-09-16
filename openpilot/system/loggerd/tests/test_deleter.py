@@ -73,6 +73,19 @@ class TestDeleter(UploaderTestCase):
     assert deleter.deleter_step() == (False, None)
     assert f_path.exists(), "File deleted with available space"
 
+  def test_delete_when_over_cap(self):
+    # plenty of free space, but the footage total is above MAX_LOG_BYTES
+    f_path = self.make_file_with_data(self.seg_dir, self.f_type, size_mb=0.01)
+    block_size = 4096
+    self.fake_stats = Stats(f_bavail=(10 * 1024 * 1024 * 1024) / block_size, f_blocks=10, f_frsize=block_size)
+    old_cap = deleter.MAX_LOG_BYTES
+    deleter.MAX_LOG_BYTES = 1024
+    try:
+      assert deleter.deleter_step() == (True, str(f_path.parent))
+      assert not f_path.exists()
+    finally:
+      deleter.MAX_LOG_BYTES = old_cap
+
   def test_no_delete_with_lock_file(self):
     f_path = self.make_file_with_data(self.seg_dir, self.f_type, lock=True)
 

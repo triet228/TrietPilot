@@ -14,7 +14,7 @@ This is Triet's fork of [openpilot](https://github.com/commaai/openpilot) fine t
 
 ## No comma servers, no over-the-air updates
 
-This fork never talks to comma's servers. The device does not register, upload drives, sync with comma connect, poll for prime status, or fetch software or AGNOS updates. The Firehose panel is gone and the Software panel only shows the running version. Logs and dashcam clips stay on the device until the deleter frees space.
+This fork never talks to comma's servers. The device does not register, upload drives, sync with comma connect, poll for prime status, or fetch software or AGNOS updates. The Firehose panel is gone and the Software panel only shows the running version. Logs and dashcam clips stay on the device. The deleter removes the oldest footage when free space runs low or when everything under the log directory passes 80 GB, whichever comes first, so the storage never fills up. Incident-preserved segments go last.
 
 To update, SSH into the device and pull this repo yourself, then reboot. If AGNOS ever needs a new version, flash it by hand; the launch script only prints a warning when the installed AGNOS does not match what the checkout expects.
 
