@@ -150,7 +150,7 @@ class TestLimitAheadOnMap(OpenpilotTestCase):
 
   def test_lookahead_reports_ways_with_start_distance(self):
     match = self.m.match(lat_at(0), lon_at(100), bearing=90)
-    pts, ways = lookahead(self.m, match, max_dist=2000)
+    pts, ways, _ = lookahead(self.m, match, max_dist=2000)
     assert [wi for wi, _ in ways] == [self.school, self.slow]
     assert abs(ways[0][1] - 400.0) < 3.0
     assert abs(ways[1][1] - 900.0) < 3.0

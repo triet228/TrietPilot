@@ -7,14 +7,15 @@ JSON blob on customReservedRawData1:
 
   {"valid": true, "limit_mph": 45, "target_kph": 88.5, "freeway": false,
    "road": "Washtenaw Avenue", "explicit": true, "school_zone": false,
-   "curve_speed_kph": 62.3, "limit_ahead_kph": 70.2}
+   "curve_speed_kph": 62.3, "limit_ahead_kph": 70.2, "bump_speed_kph": 33.0}
 
 curve_speed_kph is the map-based curve speed cap from curve_speed.py, present only
 while moving with a valid bearing and a bend somewhere in the look-ahead.
 limit_ahead_kph is the pre-slow cap from limit_ahead.py, present only while a road
 with a lower cruise target is coming up in the look-ahead; it brings the car down
-to the new target by the time it reaches the sign. The longitudinal planner takes
-the minimum of both and the set speed.
+to the new target by the time it reaches the sign. bump_speed_kph is the speed bump
+cap from bump_speed.py, present only while a mapped bump is within its look-ahead. The
+longitudinal planner takes the minimum of all of them and the set speed.
 
 limit_mph is the limit in force right now: a school zone's conditional limit during
 its hours (school_zone true), the ordinary posted limit otherwise. Conditional
@@ -45,6 +46,7 @@ from openpilot.selfdrive.navd.offline_map import OfflineMap
 from openpilot.selfdrive.navd.curve_speed import lookahead, curve_speed, CurveSpeedFilter
 from openpilot.selfdrive.navd.curve_speed import LOOKAHEAD_M as CURVE_LOOKAHEAD_M
 from openpilot.selfdrive.navd.limit_ahead import limit_ahead_speed, LOOKAHEAD_M as LIMIT_LOOKAHEAD_M
+from openpilot.selfdrive.navd.bump_speed import bump_speed, LOOKAHEAD_M as BUMP_LOOKAHEAD_M
 
 RATE = 5
 LOCAL_OFFSET_MPH = 10
@@ -72,6 +74,8 @@ class SpeedLimitTracker:
     self.curve_speed_ms = None
     self.limit_filter = CurveSpeedFilter(1.0 / RATE)
     self.limit_ahead_ms = None
+    self.bump_filter = CurveSpeedFilter(1.0 / RATE)
+    self.bump_speed_ms = None
     self.now = None
 
   def target_ms(self, way_idx, when=None):
@@ -87,8 +91,10 @@ class SpeedLimitTracker:
     # curve speed and the limit look-ahead need the travel direction, so only when moving with a bearing
     v_curve = None
     v_limit = None
+    v_bump = None
     if match is not None and bearing is not None:
-      pts, ways_ahead = lookahead(self.map, match, max(CURVE_LOOKAHEAD_M, LIMIT_LOOKAHEAD_M))
+      pts, ways_ahead, nodes_ahead = lookahead(self.map, match, max(CURVE_LOOKAHEAD_M, LIMIT_LOOKAHEAD_M, BUMP_LOOKAHEAD_M))
+      v_bump = bump_speed(nodes_ahead, self.map.calming_at)
       # one walk serves both: curve speed sees the geometry out to its own horizon (including
       # the point that crosses it, as before), the limit look-ahead sees the ways out to its
       cut = next((i for i, p in enumerate(pts) if p[2] >= CURVE_LOOKAHEAD_M), len(pts) - 1)
@@ -100,6 +106,7 @@ class SpeedLimitTracker:
       v_limit = limit_ahead_speed(ways_ahead, self.target_ms(match.way_idx, self.now), self.target_ms, self.now)
     self.curve_speed_ms = self.curve_filter.update(v_curve)
     self.limit_ahead_ms = self.limit_filter.update(v_limit)
+    self.bump_speed_ms = self.bump_filter.update(v_bump)
 
     if new_way == self.way_idx:
       self.pending_way = None
@@ -130,6 +137,8 @@ class SpeedLimitTracker:
       p["curve_speed_kph"] = round(self.curve_speed_ms * CV.MS_TO_KPH, 1)
     if self.limit_ahead_ms is not None:
       p["limit_ahead_kph"] = round(self.limit_ahead_ms * CV.MS_TO_KPH, 1)
+    if self.bump_speed_ms is not None:
+      p["bump_speed_kph"] = round(self.bump_speed_ms * CV.MS_TO_KPH, 1)
     return p
 
 

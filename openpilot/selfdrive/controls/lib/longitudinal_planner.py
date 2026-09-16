@@ -47,8 +47,9 @@ _A_TOTAL_MAX_BP = [20., 40.]
 def map_speed_cap_from_payload(raw):
   """Lowest map-based speed cap in kph from the speedlimitd payload, or None when absent or invalid.
 
-  Two caps share the payload: curve_speed_kph ahead of bends and limit_ahead_kph ahead
-  of a speed limit drop. Both only ever lower the cruise target, so the minimum applies.
+  Three caps share the payload: curve_speed_kph ahead of bends, limit_ahead_kph ahead of
+  a speed limit drop and bump_speed_kph ahead of a mapped speed bump. All of them only
+  ever lower the cruise target, so the minimum applies.
   """
   try:
     payload = json.loads(bytes(raw))
@@ -56,7 +57,8 @@ def map_speed_cap_from_payload(raw):
     return None
   if not payload.get("valid"):
     return None
-  caps = [float(payload[k]) for k in ("curve_speed_kph", "limit_ahead_kph") if isinstance(payload.get(k), (int, float))]
+  keys = ("curve_speed_kph", "limit_ahead_kph", "bump_speed_kph")
+  caps = [float(payload[k]) for k in keys if isinstance(payload.get(k), (int, float))]
   return min(caps) if caps else None
 
 

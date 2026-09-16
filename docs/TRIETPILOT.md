@@ -53,7 +53,7 @@ Check GitHub for updates → Update and reboot.
 |---|---|
 | Incident preservation | `openpilot/system/loggerd/incidentd.py`, `.../tests/test_incidentd.py` |
 | Stop profile | `openpilot/selfdrive/controls/lib/stop_profile.py`, `.../tests/test_stop_profile.py`, `.../tests/test_longitudinal_planner.py` |
-| Offline map, speed limit, curve speed, pre-slow for limit drops and school zones | `openpilot/selfdrive/navd/{offline_map,build_map,speedlimitd,curve_speed,limit_ahead,conditional_limit}.py`, `navd/data/annarbor_ypsilanti.json.gz`, `navd/tests/test_speedlimit.py`, `navd/tests/test_curve_speed.py`, `navd/tests/test_limit_ahead.py` |
+| Offline map, speed limit, curve speed, pre-slow for limit drops and school zones, speed bumps | `openpilot/selfdrive/navd/{offline_map,build_map,speedlimitd,curve_speed,limit_ahead,conditional_limit,bump_speed}.py`, `navd/data/annarbor_ypsilanti.json.gz`, `navd/tests/test_speedlimit.py`, `navd/tests/test_curve_speed.py`, `navd/tests/test_limit_ahead.py`, `navd/tests/test_bump_speed.py` |
 | Navigation, turn slowdown, Home/Work guess | `openpilot/selfdrive/navd/{router,navd,geocoder,build_addresses,turn_speed,auto_destination}.py`, `navd/data/annarbor_ypsilanti_addresses.json.gz`, `navd/tests/test_router.py`, `navd/tests/test_geocoder.py`, `navd/tests/test_turn_speed.py`, `navd/tests/test_auto_destination.py` |
 | Navigation UI | `openpilot/selfdrive/ui/lib/nav_helpers.py`, `openpilot/selfdrive/ui/onroad/nav_banner.py`, `openpilot/selfdrive/ui/layouts/settings/navigation.py`, `openpilot/selfdrive/ui/mici/layouts/settings/navigation.py` |
 | Nudgeless lane change | `openpilot/selfdrive/controls/lib/auto_lane_change.py`, `.../tests/test_auto_lane_change.py` |
@@ -128,9 +128,10 @@ curl -A "TrietPilot-build-map/1.0" -o overpass.json --data-urlencode 'data=<quer
 python3 openpilot/selfdrive/navd/build_map.py overpass.json openpilot/selfdrive/navd/data/annarbor_ypsilanti.json.gz
 ```
 
-The map file is version 2: it carries the area's time zone and, per way, any
-`maxspeed:conditional` school-zone rules parsed by `conditional_limit.py`. Version 1
-files still load, with no conditional limits.
+The map file is version 3: it carries the area's time zone, per way any
+`maxspeed:conditional` school-zone rules parsed by `conditional_limit.py`, and the
+traffic calming nodes (speed bumps) on the roads. Older files still load, without
+whatever they lack.
 
 ## Running the fork's tests
 

@@ -9,6 +9,8 @@ File format (gzipped JSON):
   ways: list of {n: [node idx...], s: speed limit mph, x: limit was explicit in OSM,
                  c: class idx, o: oneway (0 both, 1 forward, -1 reverse), name: str,
                  sc: optional conditional limit rules, see conditional_limit.py}
+  calming: [[node idx, kind], ...] speed bumps on the roads (version 3), kind is
+           bump, hump, table or cushion; see bump_speed.py
 
 Everything runs in memory with a coarse grid index so lookups are a few hundred
 microseconds. Distances use a local equirectangular projection, accurate to well
@@ -116,6 +118,7 @@ class OfflineMap:
       data = json.load(f)
     self.classes = data["classes"]
     self.tz = self._load_tz(data.get("tz", DEFAULT_TIMEZONE))
+    self.calming = {int(n): kind for n, kind in data.get("calming", [])}
     self.lat = np.asarray(data["lat"], dtype=np.float64) * 1e-6
     self.lon = np.asarray(data["lon"], dtype=np.float64) * 1e-6
     self.ways = data["ways"]
@@ -222,6 +225,10 @@ class OfflineMap:
 
   def has_conditional_limit(self, way_idx):
     return bool(self.ways[way_idx].get("sc"))
+
+  def calming_at(self, node_idx):
+    """traffic_calming kind at a road node (bump, hump, table, cushion), or None."""
+    return self.calming.get(node_idx)
 
   def road_class(self, way_idx):
     return self.classes[self.ways[way_idx]["c"]]

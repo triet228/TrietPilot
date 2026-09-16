@@ -9,13 +9,21 @@ Usage:
 To regenerate or widen the area, run this Overpass query (adjust the bbox):
 
   [out:json][timeout:600];
-  way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|
-                   secondary|secondary_link|tertiary|tertiary_link|unclassified|
-                   residential|living_street)$"](42.17,-83.85,42.36,-83.53);
+  (
+    way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|
+                     secondary|secondary_link|tertiary|tertiary_link|unclassified|
+                     residential|living_street)$"](42.17,-83.85,42.36,-83.53);
+    node["traffic_calming"](42.17,-83.85,42.36,-83.53);
+  );
   out geom;
 
 `out geom` is required: it includes both node ids (for graph connectivity) and
 coordinates. The output format is documented in offline_map.py.
+
+Speed bumps come from the traffic_calming nodes in the same dump: a node tagged bump,
+hump, table or cushion that lies on one of the roads is stored with its kind, and a
+short road way carrying the tag itself (speed tables are often mapped that way) marks
+its nodes. Islands and other kinds are ignored.
 
 maxspeed:conditional tags (school zones) become per-way time rules, see
 conditional_limit.py. The map carries the IANA time zone of the area so the device
@@ -48,6 +56,9 @@ DEFAULT_SPEED_MPH = {
   "residential": 25,
   "living_street": 15,
 }
+
+# traffic_calming kinds that mean "slow down here"; islands, chokers and the like do not
+CALMING_KINDS = ("bump", "hump", "table", "cushion")
 
 _MAXSPEED_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(mph|km/h|kph)?\s*$", re.IGNORECASE)
 
@@ -83,11 +94,20 @@ def parse_oneway(tags):
   return 0
 
 
+def calming_kind(tags):
+  kind = tags.get("traffic_calming")
+  return kind if kind in CALMING_KINDS else None
+
+
 def build(elements):
   node_index = {}
   node_lat = []
   node_lon = []
   ways = []
+  # osm node id -> kind, for traffic_calming nodes; resolved to node indices once the roads are built
+  calming_ids = {el["id"]: calming_kind(el.get("tags", {})) for el in elements if el.get("type") == "node"}
+  calming_ids = {k: v for k, v in calming_ids.items() if v is not None}
+  calming = {}
 
   for el in elements:
     if el.get("type") != "way" or "nodes" not in el or "geometry" not in el:
@@ -120,9 +140,18 @@ def build(elements):
     if conditional:
       w["sc"] = conditional
     ways.append(w)
+    way_kind = calming_kind(tags)
+    if way_kind is not None:
+      for ni in idxs:
+        calming[ni] = way_kind
+
+  for nid, kind in calming_ids.items():
+    if nid in node_index:
+      calming[node_index[nid]] = kind
 
   return {
-    "version": 2,
+    "version": 3,
+    "calming": sorted([ni, kind] for ni, kind in calming.items()),
     "tz": MAP_TIMEZONE,
     "classes": ROAD_CLASSES,
     "lat": node_lat,
@@ -142,7 +171,8 @@ def main():
     json.dump(out, f, separators=(",", ":"))
   explicit = sum(w["x"] for w in out["ways"])
   conditional = sum("sc" in w for w in out["ways"])
-  summary = f"{len(out['ways'])} ways, {len(out['lat'])} nodes, {explicit} with explicit maxspeed, {conditional} with conditional limits"
+  counts = f"{explicit} with explicit maxspeed, {conditional} with conditional limits, {len(out['calming'])} speed bump nodes"
+  summary = f"{len(out['ways'])} ways, {len(out['lat'])} nodes, {counts}"
   print(f"{summary} -> {sys.argv[2]}")
 
 

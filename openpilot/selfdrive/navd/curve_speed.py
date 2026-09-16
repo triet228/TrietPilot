@@ -44,11 +44,13 @@ def lookahead(m, match, max_dist=LOOKAHEAD_M):
   Follows the current way in the travel direction, then the straightest continuation
   at each way end. Stops at ambiguous forks, at turns, and at max_dist. Returns
 
-    pts   [(x, y, dist), ...] road geometry ahead, first point is the car
-    ways  [(way_idx, dist), ...] every way entered after the current one and the
-          distance from the car to where it begins, in travel order
+    pts    [(x, y, dist), ...] road geometry ahead, first point is the car
+    ways   [(way_idx, dist), ...] every way entered after the current one and the
+           distance from the car to where it begins, in travel order
+    nodes  [(node_idx, dist), ...] every road node passed, nearest first
 
-  Curve speed uses pts; the speed limit look-ahead (limit_ahead.py) uses ways.
+  Curve speed uses pts, the speed limit look-ahead (limit_ahead.py) uses ways, and
+  the speed bump look-ahead (bump_speed.py) uses nodes.
   """
   way = m.ways[match.way_idx]
   n = way["n"]
@@ -58,6 +60,7 @@ def lookahead(m, match, max_dist=LOOKAHEAD_M):
   px, py = ax + match.frac * (bx - ax), ay + match.frac * (by - ay)
   pts = [(float(px), float(py), 0.0)]
   ways = []
+  nodes = []
 
   # remaining nodes of this way in travel direction
   if match.forward:
@@ -73,11 +76,12 @@ def lookahead(m, match, max_dist=LOOKAHEAD_M):
       x, y = float(m.x[node]), float(m.y[node])
       dist += math.hypot(x - pts[-1][0], y - pts[-1][1])
       pts.append((x, y, dist))
+      nodes.append((node, dist))
       prev_node = node
       if dist >= max_dist:
-        return pts, ways
+        return pts, ways, nodes
     if len(pts) < 2:
-      return pts, ways
+      return pts, ways, nodes
 
     # pick the straightest way onward from the last node
     hx, hy = pts[-2][0], pts[-2][1]
@@ -89,13 +93,13 @@ def lookahead(m, match, max_dist=LOOKAHEAD_M):
       diff = angle_diff(heading, _heading(pts[-1][0], pts[-1][1], float(m.x[nxt]), float(m.y[nxt])))
       options.append((diff, wi, nxt))
     if not options:
-      return pts, ways
+      return pts, ways, nodes
     options.sort()
     best = options[0]
     if best[0] > CONTINUE_MAX_DEG:
-      return pts, ways
+      return pts, ways, nodes
     if len(options) > 1 and options[1][0] - best[0] < FORK_AMBIGUOUS_DEG:
-      return pts, ways
+      return pts, ways, nodes
     wi, nxt = best[1], best[2]
     used_ways.add(wi)
     ways.append((wi, dist))
@@ -106,7 +110,7 @@ def lookahead(m, match, max_dist=LOOKAHEAD_M):
       seq = wn[i + 1:]
     else:
       seq = list(reversed(wn[:i]))
-  return pts, ways
+  return pts, ways, nodes
 
 
 def lookahead_points(m, match, max_dist=LOOKAHEAD_M):
