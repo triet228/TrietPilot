@@ -2,7 +2,7 @@
 
 TrietPilot is a fork of [openpilot](https://github.com/commaai/openpilot) created by Triet.
 
-It runs on a [comma](https://comma.ai) device and lets AI drive the car.
+This is Triet's fork of [openpilot](https://github.com/commaai/openpilot) fine tuned for 2021 Toyota Corolla LE and local area Ypsilanti/Ann Arbor, Michigan, USA. It basically lets AI drive the car.
 
 ## Features Triet added
 
