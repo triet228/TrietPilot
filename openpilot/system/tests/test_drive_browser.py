@@ -158,6 +158,54 @@ class TestServer(OpenpilotTestCase):
     r, _ = self.get("/prepare/does-not-exist--0")
     assert r.status == 404
 
+  def post(self, path):
+    conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+    conn.request("POST", path)
+    r = conn.getresponse()
+    body = r.read()
+    conn.close()
+    return r, json.loads(body)
+
+  def test_keep_buttons(self):
+    store = set()
+    orig = (db.keep.supported, db.keep.is_kept, db.keep.set_kept)
+    db.keep.supported = lambda: True
+    db.keep.is_kept = lambda p: p in store
+
+    def set_kept(p, kept):
+      before = p in store
+      (store.add if kept else store.discard)(p)
+      return before != kept
+    db.keep.set_kept = set_kept
+    try:
+      for i in range(1, 30):
+        make_segment(self.root, f"r1--{i}", size=100)
+      make_segment(self.root, "r2--0", size=100)
+      r, j = self.post("/keep/r1--15")
+      assert r.status == 200 and j["changed"] == 21
+      assert all(os.path.join(self.root, f"r1--{i}") in store for i in range(5, 26))
+      assert os.path.join(self.root, "r1--4") not in store and os.path.join(self.root, "r2--0") not in store
+      r, body = self.get("/")
+      assert b"KEPT" in body and b"/unkeep/r1--15" in body and b"/keep/r1--3" in body
+      assert b"/keep_route/r1" in body  # not every segment of r1 is kept yet
+      r, j = self.post("/keep_route/r1")
+      assert r.status == 200 and j["changed"] == 30 - 21
+      r, body = self.get("/")
+      assert b"/unkeep_route/r1" in body
+      r, j = self.post("/unkeep/r1--0")
+      assert r.status == 200 and j["changed"] == 11
+      r, j = self.post("/unkeep_route/r1")
+      assert r.status == 200 and not any("r1--" in p for p in store)
+      r, j = self.post("/keep/nope--0")
+      assert r.status == 404
+      r, j = self.post("/keep_route/../etc")
+      assert r.status == 404
+      db.keep.supported = lambda: False
+      r, j = self.post("/keep/r1--1")
+      assert r.status == 501 and "extended attributes" in j["error"]
+    finally:
+      db.keep.supported, db.keep.is_kept, db.keep.set_kept = orig
+
   def test_prune_keeps_newest(self):
     os.makedirs(self.cache)
     for i in range(db.CACHE_KEEP + 5):

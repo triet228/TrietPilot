@@ -20,6 +20,11 @@ clips use) into a cache next to the log directory. On a PC ffmpeg is used instea
 The cache keeps the newest CACHE_KEEP clips and is outside realdata, so deleter never
 sees it and it never counts against the log budget.
 
+Keep buttons mark footage so deleter leaves it alone: "Keep 10 min" on a segment marks
+it and ten minutes either side, "Keep route" marks the whole route, and Release undoes
+either. Kept footage is protected up to a rolling 20 GB, oldest released first; see
+system/loggerd/keep.py. Marks are extended attributes on the segment directories.
+
 Route directories are `<route>--<segment>`; the route id carries no date, so times
 shown are the segment directory's creation time in the map area's time zone.
 """
@@ -39,9 +44,11 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.hardware import PC
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.loggerd import keep
 
 PORT = 8080
 SEGMENT_RE = re.compile(r"^([A-Za-z0-9_-]+?)--(\d+)$")
+ROUTE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 RAW_FILES = ("fcamera.hevc", "ecamera.hevc", "dcamera.hevc", "qcamera.ts", "rlog.zst", "qlog.zst")
 CONTENT_TYPES = {".mp4": "video/mp4", ".ts": "video/mp2t", ".hevc": "application/octet-stream", ".zst": "application/zstd"}
 PRESERVE_ATTR = "user.preserve"  # set by loggerd on a userBookmark, honoured by deleter
@@ -107,6 +114,7 @@ def segment_info(root, name):
     "size": sum(files.values()),
     "mtime": mtime,
     "preserved": is_preserved(path),
+    "kept": keep.is_kept(path),
     "playable": "fcamera.hevc" in files or "qcamera.ts" in files,
   }
 
@@ -129,12 +137,17 @@ def list_routes(root):
       "id": rid,
       "segments": segs,
       "preserved": any(s["preserved"] for s in segs),
+      "kept": any(s["kept"] for s in segs),
       "start": min(s["mtime"] for s in segs),
       "size": sum(s["size"] for s in segs),
       "duration": len(segs) * SEGMENT_LENGTH,
     })
-  routes.sort(key=lambda r: (not r["preserved"], -r["start"]))
+  routes.sort(key=lambda r: (not (r["preserved"] or r["kept"]), -r["start"]))
   return routes
+
+
+def kept_bytes(routes):
+  return sum(s["size"] for r in routes for s in r["segments"] if s["kept"])
 
 
 def encode_command(src, out):
@@ -251,7 +264,8 @@ h1{margin:0;font-size:18px} header span{color:#999;font-size:13px}
 .route h2{margin:0;padding:10px 14px;background:#1c1c1c;font-size:15px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .route h2 small{color:#999;font-weight:normal}
 .badge{background:#c0392b;color:#fff;border-radius:4px;padding:2px 6px;font-size:12px}
-.badge.seg{background:#7a2a22}
+.badge.seg{background:#7a2a22} .badge.keep{background:#1e7d4a}
+button.keep{background:#1e7d4a} button.rel{background:#555}
 table{width:100%;border-collapse:collapse} td{padding:7px 14px;border-top:1px solid #222;font-size:14px;vertical-align:middle}
 td.n{color:#999;width:40px} td.t{white-space:nowrap} td.s{color:#999;white-space:nowrap}
 td.a{text-align:right;white-space:nowrap}
@@ -292,30 +306,48 @@ function play(name, row) {
 function download(name) {
   prepare(name, () => { window.location.href = '/download/' + name + '.mp4'; });
 }
+async function mark(path) {
+  status.textContent = 'Updating…';
+  let r, j;
+  try { r = await fetch(path, {method: 'POST'}); j = await r.json(); } catch (e) { status.textContent = 'Request failed'; return; }
+  if (!r.ok) { status.textContent = j.error || 'Failed'; return; }
+  location.reload();
+}
 </script></body></html>
 """
 
 
 def render_index(routes, tz):
   total = sum(r["size"] for r in routes)
-  summary = f"{len(routes)} routes, {format_size(total)}, {sum(r['preserved'] for r in routes)} preserved"
+  kept = f"kept {format_size(kept_bytes(routes))} of {format_size(keep.KEEP_BUDGET_BYTES)}"
+  summary = f"{len(routes)} routes, {format_size(total)}, {sum(r['preserved'] for r in routes)} preserved, {kept}"
   out = [PAGE_HEAD.replace("__SUMMARY__", html.escape(summary))]
   if not routes:
     out.append('<div class="empty">No drives recorded yet.</div>')
   for r in routes:
     rid = html.escape(r["id"])
     badge = '<span class="badge">PRESERVED</span>' if r["preserved"] else ""
+    if r["kept"]:
+      badge += ' <span class="badge keep">KEPT</span>'
     meta = f'{r["duration"] // 60} min, {format_size(r["size"])}, {len(r["segments"])} segments'
-    out.append(f'<div class="route"><h2>{html.escape(format_time(r["start"], tz))} {badge}<small>{meta}</small><small>{rid}</small></h2><table>')
+    all_kept = all(s["kept"] for s in r["segments"])
+    route_btn = (f'<button class="rel" onclick="mark(\'/unkeep_route/{rid}\')">Release route</button>' if all_kept
+                 else f'<button class="keep" onclick="mark(\'/keep_route/{rid}\')">Keep route</button>')
+    out.append(f'<div class="route"><h2>{html.escape(format_time(r["start"], tz))} {badge}<small>{meta}</small><small>{rid}</small>{route_btn}</h2><table>')
     for s in r["segments"]:
       name = html.escape(s["name"])
-      seg_badge = ' <span class="badge seg">kept</span>' if s["preserved"] else ""
+      seg_badge = ' <span class="badge seg">incident</span>' if s["preserved"] else ""
+      if s["kept"]:
+        seg_badge += ' <span class="badge keep">kept</span>'
+      keep_btn = (f'<button class="rel" onclick="mark(\'/unkeep/{name}\')">Release 10 min</button>' if s["kept"]
+                  else f'<button class="keep" onclick="mark(\'/keep/{name}\')">Keep 10 min</button>')
       raw = "".join(f'<a class="raw" href="/file/{name}/{fn}" download>{fn.split(".")[0]}</a>' for fn in s["files"])
       if s["playable"]:
         play = f'<button onclick="play(\'{name}\', this.closest(\'tr\'))">Play</button>'
         actions = play + f'<button class="alt" onclick="download(\'{name}\')">Download MP4</button>'
       else:
         actions = '<span class="s">no video</span>'
+      actions += keep_btn
       when = html.escape(format_time(s["mtime"], tz))
       out.append(f'<tr><td class="n">{s["index"]}</td><td class="t">{when}{seg_badge}</td>')
       out.append(f'<td class="s">{format_size(s["size"])}{raw}</td><td class="a">{actions}</td></tr>')
@@ -338,6 +370,32 @@ class Site:
       return None
     p = os.path.join(self.root, name)
     return p if os.path.isdir(p) else None
+
+  def mark(self, kind, target):
+    """Applies a Keep/Release request. Returns (http status, json dict)."""
+    if not keep.supported():
+      return 501, {"error": "keep marks need Linux extended attributes; not available on this machine"}
+    try:
+      names = os.listdir(self.root)
+    except OSError:
+      names = []
+    if kind in ("keep", "unkeep"):
+      parts = keep.split_segment(target)
+      if parts is None or self.segment_dir(target) is None:
+        return 404, {"error": "no such segment"}
+      targets = keep.keep_range(names, parts[0], parts[1])
+    elif kind in ("keep_route", "unkeep_route"):
+      if ROUTE_RE.match(target) is None:
+        return 404, {"error": "no such route"}
+      targets = keep.route_segments(names, target)
+      if not targets:
+        return 404, {"error": "no such route"}
+    else:
+      return 404, {"error": "unknown action"}
+    wanted = kind.startswith("keep")
+    changed = sum(keep.set_kept(os.path.join(self.root, n), wanted) for n in targets)
+    cloudlog.info(f"drive_browser: {kind} {target}: {changed} segments changed")
+    return 200, {"changed": changed, "segments": targets}
 
 
 def make_handler(site):
@@ -368,6 +426,13 @@ def make_handler(site):
         self.send_bytes(404, b"not found", "text/plain")
       except (BrokenPipeError, ConnectionResetError):
         pass
+
+    def do_POST(self):
+      parts = [p for p in self.path.split("?", 1)[0].split("/") if p]
+      if len(parts) != 2:
+        return self.send_bytes(404, b'{"error": "not found"}', "application/json")
+      code, body = site.mark(parts[0], parts[1])
+      self.send_bytes(code, json.dumps(body).encode(), "application/json")
 
     def send_bytes(self, code, body, ctype):
       self.send_response(code)

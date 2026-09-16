@@ -7,6 +7,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.system.loggerd.config import get_available_bytes, get_available_percent
 from openpilot.system.loggerd.uploader import listdir_by_creation
 from openpilot.system.loggerd.xattr_cache import getxattr
+from openpilot.system.loggerd import keep
 
 MIN_BYTES = 5 * 1024 * 1024 * 1024
 MIN_PERCENT = 10
@@ -70,9 +71,13 @@ def deleter_step() -> tuple[bool, str | None]:
 
   dirs = listdir_by_creation(Paths.log_root())
   preserved_dirs = get_preserved_segments(dirs)
+  # segments the driver kept from the drive browser: protected newest-first up to keep.KEEP_BUDGET_BYTES,
+  # older kept segments beyond the budget fall back to the normal age order
+  kept_dirs, _ = keep.protected_kept(dirs, lambda d: keep.is_kept(os.path.join(Paths.log_root(), d)),
+                                     lambda d: keep.dir_bytes(os.path.join(Paths.log_root(), d)))
 
   # remove the earliest directory we can
-  for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs)):
+  for delete_dir in sorted(dirs, key=lambda d: (d in DELETE_LAST, d in preserved_dirs, d in kept_dirs)):
     delete_path = os.path.join(Paths.log_root(), delete_dir)
 
     if any(name.endswith(".lock") for name in os.listdir(delete_path)):

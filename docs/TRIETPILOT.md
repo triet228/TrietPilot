@@ -59,7 +59,7 @@ Check GitHub for updates → Update and reboot.
 | Nudgeless lane change | `openpilot/selfdrive/controls/lib/auto_lane_change.py`, `.../tests/test_auto_lane_change.py` |
 | Self-update | `openpilot/system/self_update.py`, `openpilot/system/tests/test_self_update.py` |
 | Settings presets | `openpilot/system/fork_presets.py`, `openpilot/system/tests/test_fork_presets.py`. The table of every setting, applied by manager on each boot. |
-| Drive browser | `openpilot/system/drive_browser.py`, `openpilot/system/tests/test_drive_browser.py` |
+| Drive browser, kept footage | `openpilot/system/drive_browser.py`, `openpilot/system/tests/test_drive_browser.py`, `openpilot/system/loggerd/keep.py`, `openpilot/system/loggerd/tests/test_keep.py` |
 | Per-car tuning | `openpilot/selfdrive/car/fork_tuning.py`, `openpilot/selfdrive/car/tests/test_fork_tuning.py`. All fork longitudinal constants come from here; add a car by adding a dict keyed by its fingerprint. |
 | Fork tooling | `scripts/upstream_sync.sh`, `scripts/test_fork.py`, `scripts/update_now.sh`, `docs/TRIETPILOT.md` |
 
@@ -82,7 +82,7 @@ Check GitHub for updates → Update and reboot.
 | `openpilot/selfdrive/controls/tests/test_longcontrol.py` | tests for the stop/start changes | `TestLongControlSmoothStopGo` |
 | `openpilot/selfdrive/car/cruise.py` | `parse_speed_limit_target`, `apply_speed_limit_target` | `apply_speed_limit_target` |
 | `openpilot/selfdrive/car/card.py` | subscribes `customReservedRawData1`, calls `apply_speed_limit_target`, reads `SpeedLimitCruise` | `speed_limit_target_kph` |
-| `openpilot/system/loggerd/deleter.py` | `MAX_LOG_BYTES` cap and `get_log_root_bytes` | `MAX_LOG_BYTES` |
+| `openpilot/system/loggerd/deleter.py` | `MAX_LOG_BYTES` cap, `get_log_root_bytes`, kept segments (`keep.protected_kept`) deleted last | `MAX_LOG_BYTES` |
 | `openpilot/system/loggerd/tests/test_deleter.py` | cap test | `test_delete_when_over_cap` |
 | `openpilot/selfdrive/ui/ui_state.py` | subscribes `gpsLocation`, `customReservedRawData1/2` | `customReservedRawData2` |
 | `openpilot/selfdrive/ui/onroad/hud_renderer.py`, `.../mici/onroad/hud_renderer.py` | `NavBanner` created and rendered | `NavBanner` |
