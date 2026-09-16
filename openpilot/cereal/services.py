@@ -93,6 +93,8 @@ _services: dict[str, tuple] = {
   "livestreamNarrowRoadEncodeData": (False, 20., None, QueueSize.MEDIUM),
   "livestreamCabinEncodeData": (False, 20., None, QueueSize.MEDIUM),
   "customReservedRawData0": (True, 0.),
+  "customReservedRawData1": (True, 5., 1),  # speedlimitd: posted limit + cruise target, JSON
+  "customReservedRawData2": (True, 2., 1),  # navd: turn-by-turn instruction, JSON
 }
 SERVICE_LIST = {name: Service(*vals) for
                 idx, (name, vals) in enumerate(_services.items())}

@@ -1,3 +1,4 @@
+import json
 import math
 import numpy as np
 
@@ -28,6 +29,18 @@ CRUISE_INTERVAL_SIGN = {
 }
 
 
+def parse_speed_limit_target(raw):
+  """Target set speed in kph from a speedlimitd payload, or None if invalid or unusable."""
+  try:
+    payload = json.loads(raw)
+  except (ValueError, TypeError):
+    return None
+  if not payload.get("valid"):
+    return None
+  target = payload.get("target_kph")
+  return float(target) if isinstance(target, (int, float)) else None
+
+
 class VCruiseHelper:
   def __init__(self, CP):
     self.CP = CP
@@ -36,6 +49,7 @@ class VCruiseHelper:
     self.v_cruise_kph_last = 0
     self.button_timers = {ButtonType.decelCruise: 0, ButtonType.accelCruise: 0}
     self.button_change_states = {btn: {"standstill": False, "enabled": False} for btn in self.button_timers}
+    self.speed_limit_target_kph = None
 
   @property
   def v_cruise_initialized(self):
@@ -122,6 +136,28 @@ class VCruiseHelper:
         # Start/end timer and store current state on change of button pressed
         self.button_timers[b.type.raw] = 1 if b.pressed else 0
         self.button_change_states[b.type.raw] = {"standstill": CS.cruiseState.standstill, "enabled": enabled}
+
+  def apply_speed_limit_target(self, target_kph, enabled):
+    """Set the cruise speed from the posted-limit target published by speedlimitd.
+
+    Applied once per new target so the driver can still nudge the set speed with the
+    buttons; the next road with a different limit takes over again. Only cars where
+    openpilot owns the set speed (non-PCM cruise) can be steered this way.
+    """
+    if self.CP.pcmCruise:
+      return
+    if target_kph is None:
+      self.speed_limit_target_kph = None
+      return
+    if not enabled or not self.v_cruise_initialized:
+      # forget the last applied target so the first frame after engaging applies
+      # the current road's target instead of waiting for the limit to change
+      self.speed_limit_target_kph = None
+      return
+    if target_kph != self.speed_limit_target_kph:
+      self.speed_limit_target_kph = target_kph
+      self.v_cruise_kph = float(np.clip(round(target_kph, 1), V_CRUISE_MIN, V_CRUISE_MAX))
+      self.v_cruise_cluster_kph = self.v_cruise_kph
 
   def initialize_v_cruise(self, CS, experimental_mode: bool) -> None:
     # initializing is handled by the PCM

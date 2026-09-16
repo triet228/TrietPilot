@@ -19,7 +19,7 @@ from opendbc.car.fw_versions import ObdCallback
 from opendbc.car.car_helpers import get_car, interfaces
 from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
-from openpilot.selfdrive.car.cruise import VCruiseHelper
+from openpilot.selfdrive.car.cruise import VCruiseHelper, parse_speed_limit_target
 
 REPLAY = "REPLAY" in os.environ
 
@@ -65,7 +65,7 @@ class Car:
 
   def __init__(self, CI=None, RI=None) -> None:
     self.can_sock = messaging.sub_sock('can', timeout=20)
-    self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents'])
+    self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents', 'customReservedRawData1'])
     self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'radarTracks'])
 
     self.can_rcv_cum_timeout_counter = 0
@@ -153,6 +153,8 @@ class Car:
 
     self.is_metric = self.params.get_bool("IsMetric")
     self.experimental_mode = self.params.get_bool("ExperimentalMode")
+    self.speed_limit_cruise = self.params.get_bool("SpeedLimitCruise")
+    self.speed_limit_target_kph = None
 
     # card is driven by can recv, expected at 100Hz
     self.rk = Ratekeeper(100, print_delay_threshold=None)
@@ -184,6 +186,13 @@ class Car:
     if self.sm['carControl'].enabled and not self.CC_prev.enabled:
       # Use CarState w/ buttons from the step selfdrived enables on
       self.v_cruise_helper.initialize_v_cruise(self.CS_prev, self.experimental_mode)
+
+    # posted speed limit target from speedlimitd (offline map), see selfdrive/navd
+    if self.sm.updated['customReservedRawData1']:
+      self.speed_limit_target_kph = parse_speed_limit_target(bytes(self.sm['customReservedRawData1']))
+    if not self.speed_limit_cruise or not self.sm.alive['customReservedRawData1']:
+      self.speed_limit_target_kph = None
+    self.v_cruise_helper.apply_speed_limit_target(self.speed_limit_target_kph, self.sm['carControl'].enabled)
 
     # TODO: mirror the carState.cruiseState struct?
     CS.vCruise = float(self.v_cruise_helper.v_cruise_kph)
@@ -256,6 +265,7 @@ class Car:
     while not evt.is_set():
       self.is_metric = self.params.get_bool("IsMetric")
       self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+      self.speed_limit_cruise = self.params.get_bool("SpeedLimitCruise")
       time.sleep(0.1)
 
   def card_thread(self):
