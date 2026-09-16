@@ -36,6 +36,7 @@ FORK_TESTS = [
   "openpilot/selfdrive/navd/tests/test_geocoder.py",
   "openpilot/system/tests/test_self_update.py",
   "openpilot/system/tests/test_drive_browser.py",
+  "openpilot/system/tests/test_fork_presets.py",
   "openpilot/selfdrive/car/tests/test_fork_tuning.py",
 ]
 

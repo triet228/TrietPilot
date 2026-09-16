@@ -58,6 +58,7 @@ Check GitHub for updates → Update and reboot.
 | Navigation UI | `openpilot/selfdrive/ui/lib/nav_helpers.py`, `openpilot/selfdrive/ui/onroad/nav_banner.py`, `openpilot/selfdrive/ui/layouts/settings/navigation.py`, `openpilot/selfdrive/ui/mici/layouts/settings/navigation.py` |
 | Nudgeless lane change | `openpilot/selfdrive/controls/lib/auto_lane_change.py`, `.../tests/test_auto_lane_change.py` |
 | Self-update | `openpilot/system/self_update.py`, `openpilot/system/tests/test_self_update.py` |
+| Settings presets | `openpilot/system/fork_presets.py`, `openpilot/system/tests/test_fork_presets.py`. The table of every setting, applied by manager on each boot. |
 | Drive browser | `openpilot/system/drive_browser.py`, `openpilot/system/tests/test_drive_browser.py` |
 | Per-car tuning | `openpilot/selfdrive/car/fork_tuning.py`, `openpilot/selfdrive/car/tests/test_fork_tuning.py`. All fork longitudinal constants come from here; add a car by adding a dict keyed by its fingerprint. |
 | Fork tooling | `scripts/upstream_sync.sh`, `scripts/test_fork.py`, `scripts/update_now.sh`, `docs/TRIETPILOT.md` |
@@ -67,7 +68,7 @@ Check GitHub for updates → Update and reboot.
 | File | What we changed | Marker to grep for |
 |---|---|---|
 | `openpilot/system/manager/process_config.py` | added `incidentd`, `drivebrowserd`, `speedlimitd`, `navd`; removed `manage_athenad`, `uploader`, `updated` | `speedlimitd` |
-| `openpilot/system/manager/manager.py` | dongle id read locally, no `register()` call, no athena ignore list | `never talks to` |
+| `openpilot/system/manager/manager.py` | dongle id read locally, no `register()` call, no athena ignore list, `apply_presets` after the defaults loop | `never talks to` |
 | `openpilot/system/manager/test/test_manager.py` | blacklist without `manage_athenad` | `BLACKLIST_PROCS` |
 | `openpilot/common/params_keys.h` | `SpeedLimitCruise`, `AutoExperimentalMode`, `NudgelessLaneChange`, `NavTurnSlowdown`, `NavDestination`, `NavHome`, `NavWork` | `NavDestination` |
 | `openpilot/cereal/services.py` | `customReservedRawData1` (5 Hz) and `customReservedRawData2` (2 Hz) | `customReservedRawData1` |

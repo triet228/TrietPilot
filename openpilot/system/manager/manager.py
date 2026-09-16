@@ -43,6 +43,14 @@ def manager_init() -> None:
     if default_value is not None and params.get(k) is None:
       params.put(k, default_value, block=True)
 
+  # TrietPilot: every fork and toggle setting is preset in the repo and re-applied on each boot,
+  # so nothing needs to be toggled on the device. See system/fork_presets.py.
+  try:
+    from openpilot.system.fork_presets import apply_presets
+    apply_presets(params)
+  except Exception:
+    cloudlog.exception("fork_presets: applying presets failed")
+
   # Create folders needed for msgq
   try:
     os.mkdir(Paths.shm_path())
