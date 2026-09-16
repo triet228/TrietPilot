@@ -15,7 +15,7 @@ from openpilot.common.hardware import HARDWARE
 from openpilot.system.manager.helpers import unblock_stdout, save_bootlog
 from openpilot.system.manager.process import ensure_running
 from openpilot.system.manager.process_config import managed_processes
-from openpilot.system.athena.registration import register, UNREGISTERED_DONGLE_ID
+from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
 from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.common.version import get_build_metadata
 from openpilot.common.hardware.hw import Paths
@@ -62,12 +62,17 @@ def manager_init() -> None:
   params.put_bool("IsReleaseBranch", build_metadata.release_channel, block=True)
   params.put("HardwareSerial", serial, block=True)
 
-  # set dongle id
-  reg_res = register(show_spinner=True)
-  if reg_res:
-    dongle_id = reg_res
-  else:
-    raise Exception(f"Registration failed for device {serial}")
+  # set dongle id from what is already on the device. TrietPilot never talks to
+  # comma's servers, so a device that was never registered simply stays unregistered.
+  dongle_id = params.get("DongleId")
+  if dongle_id is None:
+    dongle_id_file = Paths.persist_root() + "/comma/dongle_id"
+    if os.path.isfile(dongle_id_file):
+      with open(dongle_id_file) as f:
+        dongle_id = f.read().strip() or None
+  if dongle_id is None:
+    dongle_id = UNREGISTERED_DONGLE_ID
+  params.put("DongleId", dongle_id, block=True)
   os.environ['DONGLE_ID'] = dongle_id  # Needed for swaglog
   os.environ['GIT_ORIGIN'] = build_metadata.openpilot.git_normalized_origin # Needed for swaglog
   os.environ['GIT_BRANCH'] = build_metadata.channel # Needed for swaglog
@@ -105,8 +110,6 @@ def manager_thread() -> None:
   params = Params()
 
   ignore: list[str] = []
-  if params.get("DongleId") in (None, UNREGISTERED_DONGLE_ID):
-    ignore += ["manage_athenad", "uploader"]
   if os.getenv("NOBOARD") is not None:
     ignore.append("pandad")
   ignore += [x for x in os.getenv("BLOCK", "").split(",") if len(x) > 0]

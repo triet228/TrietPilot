@@ -1,15 +1,8 @@
 from enum import IntEnum
 import os
-import requests
 import threading
-import time
 
-from openpilot.common.api import api_get
 from openpilot.common.params import Params
-from openpilot.common.realtime import drop_realtime
-from openpilot.common.swaglog import cloudlog
-from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
-from openpilot.selfdrive.ui.lib.api_helpers import get_token
 
 
 class PrimeType(IntEnum):
@@ -24,90 +17,52 @@ class PrimeType(IntEnum):
 
 
 class PrimeState:
-  FETCH_INTERVAL = 5.0  # seconds between API calls
-  API_TIMEOUT = 10.0  # seconds for API requests
-  SLEEP_INTERVAL = 0.5  # seconds to sleep between checks in the worker thread
+  """Offline stand-in for the comma prime status.
+
+  TrietPilot never contacts comma's servers, so this never polls anything. The type
+  comes from the PrimeType param or the PRIME_TYPE env var if set, otherwise the
+  device is treated as unpaired. start() and stop() are kept so the UI code that
+  drives the old poller keeps working unchanged.
+  """
 
   def __init__(self):
     self._params = Params()
     self._lock = threading.Lock()
-    self._session = requests.Session()  # reuse session to reduce SSL handshake overhead
-    self.prime_type: PrimeType = self._load_initial_state()
+    self.prime_type = self._load_initial_state()
 
-    self._running = False
-    self._thread = None
-
-  def _load_initial_state(self) -> PrimeType:
+  def _load_initial_state(self):
     prime_type_str = os.getenv("PRIME_TYPE") or self._params.get("PrimeType")
     try:
       if prime_type_str is not None:
         return PrimeType(int(prime_type_str))
     except (ValueError, TypeError):
       pass
-    return PrimeType.UNKNOWN
+    return PrimeType.UNPAIRED
 
-  def _fetch_prime_status(self) -> None:
-    dongle_id = self._params.get("DongleId")
-    if not dongle_id or dongle_id == UNREGISTERED_DONGLE_ID:
-      return
-
-    try:
-      identity_token = get_token(dongle_id)
-      response = api_get(f"v1.1/devices/{dongle_id}", timeout=self.API_TIMEOUT, access_token=identity_token, session=self._session)
-      if response.status_code == 200:
-        data = response.json()
-        is_paired = data.get("is_paired", False)
-        prime_type = data.get("prime_type", 0)
-        self.set_type(PrimeType(prime_type) if is_paired else PrimeType.UNPAIRED)
-    except Exception as e:
-      cloudlog.error(f"Failed to fetch prime status: {e}")
-
-  def set_type(self, prime_type: PrimeType) -> None:
+  def set_type(self, prime_type):
     with self._lock:
       if prime_type != self.prime_type:
         self.prime_type = prime_type
         self._params.put("PrimeType", int(prime_type))
-        cloudlog.info(f"Prime type updated to {prime_type}")
 
-  def _worker_thread(self) -> None:
-    drop_realtime()
-    from openpilot.selfdrive.ui.ui_state import ui_state, device
-    while self._running:
-      if not ui_state.started and device._awake:
-        self._fetch_prime_status()
+  def start(self):
+    pass
 
-      for _ in range(int(self.FETCH_INTERVAL / self.SLEEP_INTERVAL)):
-        if not self._running:
-          break
-        time.sleep(self.SLEEP_INTERVAL)
+  def stop(self):
+    pass
 
-  def start(self) -> None:
-    if self._thread and self._thread.is_alive():
-      return
-    self._running = True
-    self._thread = threading.Thread(target=self._worker_thread, daemon=True)
-    self._thread.start()
-
-  def stop(self) -> None:
-    self._running = False
-    if self._thread and self._thread.is_alive():
-      self._thread.join(timeout=1.0)
-
-  def get_type(self) -> PrimeType:
+  def get_type(self):
     with self._lock:
       return self.prime_type
 
-  def is_prime(self) -> bool:
+  def is_prime(self):
     with self._lock:
       return bool(self.prime_type > PrimeType.NONE)
 
-  def is_full_prime(self) -> bool:
+  def is_full_prime(self):
     with self._lock:
       return self.prime_type > PrimeType.NONE and self.prime_type != PrimeType.LITE
 
-  def is_paired(self) -> bool:
+  def is_paired(self):
     with self._lock:
       return self.prime_type > PrimeType.UNPAIRED
-
-  def __del__(self):
-    self.stop()
