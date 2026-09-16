@@ -61,7 +61,7 @@ def load_place(name):
     return None
   try:
     place = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
-    return {"lat": float(place["lat"]), "lon": float(place["lon"]), "name": name}
+    return {"lat": float(place["lat"]), "lon": float(place["lon"]), "name": name, "address": place.get("address", "")}
   except (ValueError, TypeError, KeyError):
     return None
 
@@ -91,7 +91,7 @@ def place_text(name):
   place = load_place(name)
   if place is None:
     return "not set"
-  return f"{place['lat']:.5f}, {place['lon']:.5f}"
+  return place["address"] or f"{place['lat']:.5f}, {place['lon']:.5f}"
 
 
 def format_distance(meters, is_metric):
@@ -140,6 +140,36 @@ def maneuver_arrow(payload):
   if kind == "arrive":
     return "◎"
   return MANEUVER_ARROWS.get((kind, payload.get("modifier", "")), "↑")
+
+
+_geocoder = None
+
+
+def resolve_address(text):
+  """Offline lookup of a typed address or place name. Returns {lat, lon, label, approx} or None."""
+  global _geocoder
+  if _geocoder is None:
+    from openpilot.selfdrive.navd.geocoder import Geocoder
+    _geocoder = Geocoder()
+  return _geocoder.lookup(text)
+
+
+def navigate_to_address(text):
+  """Route to a typed address. Returns the resolved hit, or None if it could not be found."""
+  hit = resolve_address(text)
+  if hit is None:
+    return None
+  ui_state.params.put("NavDestination", {"lat": hit["lat"], "lon": hit["lon"], "name": hit["label"]})
+  return hit
+
+
+def save_place_from_address(name, text):
+  """Store a typed address as Home or Work. Returns the resolved hit, or None."""
+  hit = resolve_address(text)
+  if hit is None:
+    return None
+  ui_state.params.put(PLACE_KEYS[name], {"lat": hit["lat"], "lon": hit["lon"], "name": name, "address": hit["label"]})
+  return hit
 
 
 def status_text(payload):
