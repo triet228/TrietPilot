@@ -16,12 +16,21 @@ To regenerate or widen the area, run this Overpass query (adjust the bbox):
 
 `out geom` is required: it includes both node ids (for graph connectivity) and
 coordinates. The output format is documented in offline_map.py.
+
+maxspeed:conditional tags (school zones) become per-way time rules, see
+conditional_limit.py. The map carries the IANA time zone of the area so the device
+can evaluate them in local time whatever its own clock is set to.
 """
 
 import gzip
 import json
 import re
 import sys
+
+from openpilot.selfdrive.navd.conditional_limit import parse_conditional
+
+# local time zone of the mapped area, used to evaluate conditional limits
+MAP_TIMEZONE = "America/Detroit"
 
 # highway classes, index is what gets stored in the map file
 ROAD_CLASSES = ["motorway", "motorway_link", "trunk", "trunk_link", "primary", "primary_link",
@@ -99,17 +108,22 @@ def build(elements):
       continue
 
     speed = parse_maxspeed(tags.get("maxspeed"))
-    ways.append({
+    w = {
       "n": idxs,
       "s": speed if speed is not None else DEFAULT_SPEED_MPH[cls],
       "x": speed is not None,
       "c": ROAD_CLASSES.index(cls),
       "o": parse_oneway(tags),
       "name": tags.get("name") or tags.get("ref") or "",
-    })
+    }
+    conditional = parse_conditional(tags.get("maxspeed:conditional"), parse_maxspeed)
+    if conditional:
+      w["sc"] = conditional
+    ways.append(w)
 
   return {
-    "version": 1,
+    "version": 2,
+    "tz": MAP_TIMEZONE,
     "classes": ROAD_CLASSES,
     "lat": node_lat,
     "lon": node_lon,
@@ -127,7 +141,9 @@ def main():
   with gzip.open(sys.argv[2], "wt", encoding="utf-8") as f:
     json.dump(out, f, separators=(",", ":"))
   explicit = sum(w["x"] for w in out["ways"])
-  print(f"{len(out['ways'])} ways, {len(out['lat'])} nodes, {explicit} with explicit maxspeed -> {sys.argv[2]}")
+  conditional = sum("sc" in w for w in out["ways"])
+  summary = f"{len(out['ways'])} ways, {len(out['lat'])} nodes, {explicit} with explicit maxspeed, {conditional} with conditional limits"
+  print(f"{summary} -> {sys.argv[2]}")
 
 
 if __name__ == "__main__":

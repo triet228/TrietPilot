@@ -3,22 +3,28 @@
 """Offline road map for a fixed area, built from OpenStreetMap by build_map.py.
 
 File format (gzipped JSON):
+  tz: IANA time zone of the area, for time-conditional limits (absent in version 1 files)
   classes: list of highway class names, indexed by way["c"]
   lat, lon: node coordinates as integers in 1e-6 degrees
   ways: list of {n: [node idx...], s: speed limit mph, x: limit was explicit in OSM,
-                 c: class idx, o: oneway (0 both, 1 forward, -1 reverse), name: str}
+                 c: class idx, o: oneway (0 both, 1 forward, -1 reverse), name: str,
+                 sc: optional conditional limit rules, see conditional_limit.py}
 
 Everything runs in memory with a coarse grid index so lookups are a few hundred
 microseconds. Distances use a local equirectangular projection, accurate to well
 under a metre across a city-sized area.
 """
 
+import datetime
 import gzip
 import json
 import math
 import os
+import zoneinfo
 
 import numpy as np
+
+from openpilot.selfdrive.navd.conditional_limit import active_limit
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DEFAULT_MAP = os.path.join(DATA_DIR, "annarbor_ypsilanti.json.gz")
@@ -33,6 +39,8 @@ FREEWAY_CLASSES = ("motorway", "motorway_link", "trunk", "trunk_link")
 MAX_MATCH_DIST = 30.0  # m
 # penalty added to distance when the road runs across the direction of travel
 HEADING_PENALTY = 25.0  # m
+# time zone assumed for version 1 map files that carry none
+DEFAULT_TIMEZONE = "America/Detroit"
 
 
 def local_xy(lat, lon, lat0, lon0):
@@ -64,6 +72,35 @@ def angle_diff(a, b):
   return abs((a - b + 180.0) % 360.0 - 180.0)
 
 
+class USEasternFallback(datetime.tzinfo):
+  """US Eastern time with the post-2007 DST rule, used only when zoneinfo has no database.
+
+  A fixed offset would be an hour off for eight months of the year, which is enough to
+  miss a 30 minute school-zone window entirely.
+  """
+
+  def _dst_bounds(self, year):
+    # second Sunday in March and first Sunday in November, 02:00 local standard time
+    march = datetime.datetime(year, 3, 8)
+    start = march + datetime.timedelta(days=(6 - march.weekday()) % 7)
+    nov = datetime.datetime(year, 11, 1)
+    end = nov + datetime.timedelta(days=(6 - nov.weekday()) % 7)
+    return start.replace(hour=2), end.replace(hour=2)
+
+  def dst(self, dt):
+    if dt is None:
+      return datetime.timedelta(0)
+    start, end = self._dst_bounds(dt.year)
+    naive = dt.replace(tzinfo=None)
+    return datetime.timedelta(hours=1) if start <= naive < end else datetime.timedelta(0)
+
+  def utcoffset(self, dt):
+    return datetime.timedelta(hours=-5) + self.dst(dt)
+
+  def tzname(self, dt):
+    return "EDT" if self.dst(dt) else "EST"
+
+
 class Match:
   def __init__(self, way_idx, seg_idx, dist, forward, frac):
     self.way_idx = way_idx
@@ -78,6 +115,7 @@ class OfflineMap:
     with gzip.open(path, "rt", encoding="utf-8") as f:
       data = json.load(f)
     self.classes = data["classes"]
+    self.tz = self._load_tz(data.get("tz", DEFAULT_TIMEZONE))
     self.lat = np.asarray(data["lat"], dtype=np.float64) * 1e-6
     self.lon = np.asarray(data["lon"], dtype=np.float64) * 1e-6
     self.ways = data["ways"]
@@ -90,6 +128,18 @@ class OfflineMap:
 
     self._build_grid()
     self._adjacency = None
+
+  @staticmethod
+  def _load_tz(name):
+    try:
+      return zoneinfo.ZoneInfo(name)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+      # no tz database on this machine (Windows laptops, a stripped device image)
+      return USEasternFallback()
+
+  def local_now(self):
+    """Current wall-clock time in the map's own time zone."""
+    return datetime.datetime.now(self.tz)
 
   # ---- spatial index -------------------------------------------------------
 
@@ -164,8 +214,14 @@ class OfflineMap:
 
   # ---- attributes ----------------------------------------------------------
 
-  def speed_limit_mph(self, way_idx):
-    return self.ways[way_idx]["s"]
+  def speed_limit_mph(self, way_idx, when=None):
+    """Posted limit, mph. With a datetime `when`, an active conditional (school zone) limit wins."""
+    way = self.ways[way_idx]
+    cond = active_limit(way.get("sc"), when) if when is not None else None
+    return cond if cond is not None else way["s"]
+
+  def has_conditional_limit(self, way_idx):
+    return bool(self.ways[way_idx].get("sc"))
 
   def road_class(self, way_idx):
     return self.classes[self.ways[way_idx]["c"]]

@@ -38,11 +38,17 @@ def _heading(ax, ay, bx, by):
   return math.degrees(math.atan2(bx - ax, by - ay)) % 360.0
 
 
-def lookahead_points(m, match, max_dist=LOOKAHEAD_M):
-  """(x, y, dist) along the road ahead of the matched position, starting at the car.
+def lookahead(m, match, max_dist=LOOKAHEAD_M):
+  """Walks the road ahead of the matched position, starting at the car.
 
   Follows the current way in the travel direction, then the straightest continuation
-  at each way end. Stops at ambiguous forks, at turns, and at max_dist.
+  at each way end. Stops at ambiguous forks, at turns, and at max_dist. Returns
+
+    pts   [(x, y, dist), ...] road geometry ahead, first point is the car
+    ways  [(way_idx, dist), ...] every way entered after the current one and the
+          distance from the car to where it begins, in travel order
+
+  Curve speed uses pts; the speed limit look-ahead (limit_ahead.py) uses ways.
   """
   way = m.ways[match.way_idx]
   n = way["n"]
@@ -51,6 +57,7 @@ def lookahead_points(m, match, max_dist=LOOKAHEAD_M):
   # car position projected onto the segment
   px, py = ax + match.frac * (bx - ax), ay + match.frac * (by - ay)
   pts = [(float(px), float(py), 0.0)]
+  ways = []
 
   # remaining nodes of this way in travel direction
   if match.forward:
@@ -68,9 +75,9 @@ def lookahead_points(m, match, max_dist=LOOKAHEAD_M):
       pts.append((x, y, dist))
       prev_node = node
       if dist >= max_dist:
-        return pts
+        return pts, ways
     if len(pts) < 2:
-      return pts
+      return pts, ways
 
     # pick the straightest way onward from the last node
     hx, hy = pts[-2][0], pts[-2][1]
@@ -82,15 +89,16 @@ def lookahead_points(m, match, max_dist=LOOKAHEAD_M):
       diff = angle_diff(heading, _heading(pts[-1][0], pts[-1][1], float(m.x[nxt]), float(m.y[nxt])))
       options.append((diff, wi, nxt))
     if not options:
-      return pts
+      return pts, ways
     options.sort()
     best = options[0]
     if best[0] > CONTINUE_MAX_DEG:
-      return pts
+      return pts, ways
     if len(options) > 1 and options[1][0] - best[0] < FORK_AMBIGUOUS_DEG:
-      return pts
+      return pts, ways
     wi, nxt = best[1], best[2]
     used_ways.add(wi)
+    ways.append((wi, dist))
     wn = m.ways[wi]["n"]
     # continue along the new way from prev_node toward nxt
     i = wn.index(prev_node)
@@ -98,7 +106,12 @@ def lookahead_points(m, match, max_dist=LOOKAHEAD_M):
       seq = wn[i + 1:]
     else:
       seq = list(reversed(wn[:i]))
-  return pts
+  return pts, ways
+
+
+def lookahead_points(m, match, max_dist=LOOKAHEAD_M):
+  """(x, y, dist) along the road ahead of the matched position, see lookahead()."""
+  return lookahead(m, match, max_dist)[0]
 
 
 def curvatures(pts):

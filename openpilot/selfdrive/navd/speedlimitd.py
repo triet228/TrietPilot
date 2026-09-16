@@ -6,11 +6,19 @@ Matches GPS position against the offline map at 5 Hz and publishes a small
 JSON blob on customReservedRawData1:
 
   {"valid": true, "limit_mph": 45, "target_kph": 88.5, "freeway": false,
-   "road": "Washtenaw Avenue", "explicit": true, "curve_speed_kph": 62.3}
+   "road": "Washtenaw Avenue", "explicit": true, "school_zone": false,
+   "curve_speed_kph": 62.3, "limit_ahead_kph": 70.2}
 
 curve_speed_kph is the map-based curve speed cap from curve_speed.py, present only
-while moving with a valid bearing and a bend somewhere in the look-ahead. The
-longitudinal planner takes the minimum of it and the set speed.
+while moving with a valid bearing and a bend somewhere in the look-ahead.
+limit_ahead_kph is the pre-slow cap from limit_ahead.py, present only while a road
+with a lower cruise target is coming up in the look-ahead; it brings the car down
+to the new target by the time it reaches the sign. The longitudinal planner takes
+the minimum of both and the set speed.
+
+limit_mph is the limit in force right now: a school zone's conditional limit during
+its hours (school_zone true), the ordinary posted limit otherwise. Conditional
+limits are evaluated at the map's own local time, see conditional_limit.py.
 
 target = limit + LOCAL_OFFSET_MPH on ordinary roads, limit + FREEWAY_OFFSET_MPH
 on motorways and trunks. card.py applies the target as the set speed when the
@@ -34,7 +42,9 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.navd.offline_map import OfflineMap
-from openpilot.selfdrive.navd.curve_speed import lookahead_points, curve_speed, CurveSpeedFilter
+from openpilot.selfdrive.navd.curve_speed import lookahead, curve_speed, CurveSpeedFilter
+from openpilot.selfdrive.navd.curve_speed import LOOKAHEAD_M as CURVE_LOOKAHEAD_M
+from openpilot.selfdrive.navd.limit_ahead import limit_ahead_speed, LOOKAHEAD_M as LIMIT_LOOKAHEAD_M
 
 RATE = 5
 LOCAL_OFFSET_MPH = 10
@@ -60,16 +70,36 @@ class SpeedLimitTracker:
     self.pending_way = None
     self.curve_filter = CurveSpeedFilter(1.0 / RATE)
     self.curve_speed_ms = None
+    self.limit_filter = CurveSpeedFilter(1.0 / RATE)
+    self.limit_ahead_ms = None
+    self.now = None
 
-  def update(self, lat, lon, bearing, personality=1):
+  def target_ms(self, way_idx, when=None):
+    """Cruise target (m/s) the speed limit cruise would set on a way, at time `when`."""
+    limit = self.map.speed_limit_mph(way_idx, when)
+    return cruise_target_kph(limit, self.map.is_freeway(way_idx)) * CV.KPH_TO_MS
+
+  def update(self, lat, lon, bearing, personality=1, now=None):
+    self.now = now if now is not None else self.map.local_now()
     match = self.map.match(lat, lon, bearing)
     new_way = match.way_idx if match is not None else None
 
-    # curve speed needs the travel direction, so only when moving with a bearing
+    # curve speed and the limit look-ahead need the travel direction, so only when moving with a bearing
     v_curve = None
+    v_limit = None
     if match is not None and bearing is not None:
-      v_curve = curve_speed(lookahead_points(self.map, match), personality)
+      pts, ways_ahead = lookahead(self.map, match, max(CURVE_LOOKAHEAD_M, LIMIT_LOOKAHEAD_M))
+      # one walk serves both: curve speed sees the geometry out to its own horizon (including
+      # the point that crosses it, as before), the limit look-ahead sees the ways out to its
+      cut = next((i for i, p in enumerate(pts) if p[2] >= CURVE_LOOKAHEAD_M), len(pts) - 1)
+      v_curve = curve_speed(pts[:cut + 1], personality)
+      ways_ahead = [(wi, d) for wi, d in ways_ahead if d <= LIMIT_LOOKAHEAD_M]
+      # drops are measured against the road the car is matched to right now. For the one
+      # frame between crossing onto the slower road and the debounce accepting it, the cap
+      # simply vanishes; that is harmless, and a glitchy match can never yank the speed down.
+      v_limit = limit_ahead_speed(ways_ahead, self.target_ms(match.way_idx, self.now), self.target_ms, self.now)
     self.curve_speed_ms = self.curve_filter.update(v_curve)
+    self.limit_ahead_ms = self.limit_filter.update(v_limit)
 
     if new_way == self.way_idx:
       self.pending_way = None
@@ -85,7 +115,7 @@ class SpeedLimitTracker:
   def payload(self):
     if self.way_idx is None:
       return {"valid": False}
-    limit = self.map.speed_limit_mph(self.way_idx)
+    limit = self.map.speed_limit_mph(self.way_idx, self.now)
     freeway = self.map.is_freeway(self.way_idx)
     p = {
       "valid": True,
@@ -94,9 +124,12 @@ class SpeedLimitTracker:
       "freeway": freeway,
       "road": self.map.road_name(self.way_idx),
       "explicit": bool(self.map.ways[self.way_idx]["x"]),
+      "school_zone": limit != self.map.speed_limit_mph(self.way_idx),
     }
     if self.curve_speed_ms is not None:
       p["curve_speed_kph"] = round(self.curve_speed_ms * CV.MS_TO_KPH, 1)
+    if self.limit_ahead_ms is not None:
+      p["limit_ahead_kph"] = round(self.limit_ahead_ms * CV.MS_TO_KPH, 1)
     return p
 
 

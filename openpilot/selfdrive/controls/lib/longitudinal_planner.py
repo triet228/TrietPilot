@@ -44,16 +44,20 @@ def hold_stop_for_lead(was_stopped, v_ego, lead, gap_hysteresis=LAUNCH_GAP_HYSTE
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
-def curve_speed_from_payload(raw):
-  """Curve speed cap in kph from the speedlimitd payload, or None when absent or invalid."""
+def map_speed_cap_from_payload(raw):
+  """Lowest map-based speed cap in kph from the speedlimitd payload, or None when absent or invalid.
+
+  Two caps share the payload: curve_speed_kph ahead of bends and limit_ahead_kph ahead
+  of a speed limit drop. Both only ever lower the cruise target, so the minimum applies.
+  """
   try:
     payload = json.loads(bytes(raw))
   except (ValueError, TypeError):
     return None
   if not payload.get("valid"):
     return None
-  v = payload.get("curve_speed_kph")
-  return float(v) if isinstance(v, (int, float)) else None
+  caps = [float(payload[k]) for k in ("curve_speed_kph", "limit_ahead_kph") if isinstance(payload.get(k), (int, float))]
+  return min(caps) if caps else None
 
 
 def get_max_accel(v_ego):
@@ -97,7 +101,7 @@ class LongitudinalPlanner:
     self.stop_distance = None
     self.tuning = tuning_for(CP)
     self.stop_profile = StopProfile(self.dt, self.tuning["stop_a_firm"], self.tuning["stop_a_release"])
-    self.curve_speed_kph = None
+    self.map_speed_cap_kph = None
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -115,13 +119,13 @@ class LongitudinalPlanner:
     if sm['controlsState'].forceDecel:
       v_cruise = 0.0
 
-    # map-based curve speed from speedlimitd: only ever lowers the cruise target ahead of bends
+    # map-based caps from speedlimitd: only ever lower the cruise target, ahead of bends and speed limit drops
     if sm.updated['customReservedRawData1']:
-      self.curve_speed_kph = curve_speed_from_payload(sm['customReservedRawData1'])
+      self.map_speed_cap_kph = map_speed_cap_from_payload(sm['customReservedRawData1'])
     if not sm.alive['customReservedRawData1']:
-      self.curve_speed_kph = None
-    if self.curve_speed_kph is not None:
-      v_cruise = min(v_cruise, self.curve_speed_kph * CV.KPH_TO_MS)
+      self.map_speed_cap_kph = None
+    if self.map_speed_cap_kph is not None:
+      v_cruise = min(v_cruise, self.map_speed_cap_kph * CV.KPH_TO_MS)
 
     long_control_off = sm['controlsState'].longControlState == LongCtrlState.off
 

@@ -53,7 +53,7 @@ Check GitHub for updates → Update and reboot.
 |---|---|
 | Incident preservation | `openpilot/system/loggerd/incidentd.py`, `.../tests/test_incidentd.py` |
 | Stop profile | `openpilot/selfdrive/controls/lib/stop_profile.py`, `.../tests/test_stop_profile.py`, `.../tests/test_longitudinal_planner.py` |
-| Offline map, speed limit, curve speed | `openpilot/selfdrive/navd/{offline_map,build_map,speedlimitd,curve_speed}.py`, `navd/data/annarbor_ypsilanti.json.gz`, `navd/tests/test_speedlimit.py`, `navd/tests/test_curve_speed.py` |
+| Offline map, speed limit, curve speed, pre-slow for limit drops and school zones | `openpilot/selfdrive/navd/{offline_map,build_map,speedlimitd,curve_speed,limit_ahead,conditional_limit}.py`, `navd/data/annarbor_ypsilanti.json.gz`, `navd/tests/test_speedlimit.py`, `navd/tests/test_curve_speed.py`, `navd/tests/test_limit_ahead.py` |
 | Navigation | `openpilot/selfdrive/navd/{router,navd,geocoder,build_addresses}.py`, `navd/data/annarbor_ypsilanti_addresses.json.gz`, `navd/tests/test_router.py`, `navd/tests/test_geocoder.py` |
 | Navigation UI | `openpilot/selfdrive/ui/lib/nav_helpers.py`, `openpilot/selfdrive/ui/onroad/nav_banner.py`, `openpilot/selfdrive/ui/layouts/settings/navigation.py`, `openpilot/selfdrive/ui/mici/layouts/settings/navigation.py` |
 | Self-update | `openpilot/system/self_update.py`, `openpilot/system/tests/test_self_update.py` |
@@ -71,7 +71,7 @@ Check GitHub for updates → Update and reboot.
 | `openpilot/cereal/services.py` | `customReservedRawData1` (5 Hz) and `customReservedRawData2` (2 Hz) | `customReservedRawData1` |
 | `openpilot/selfdrive/controls/controlsd.py` | `latActive` also false on `overrideLateral` | `override_lateral` |
 | `openpilot/selfdrive/controls/lib/longcontrol.py` | `STOPPING_DECEL_RATE`, jerk-limited start (`STARTING_JERK`, `starting_frames`) | `STARTING_JERK` |
-| `openpilot/selfdrive/controls/lib/longitudinal_planner.py` | `hold_stop_for_lead`, `StopProfile` call, curve speed cap from `customReservedRawData1`, `set_weights(..., v_ego=)` | `stop_profile` |
+| `openpilot/selfdrive/controls/lib/longitudinal_planner.py` | `hold_stop_for_lead`, `StopProfile` call, map speed caps (curve speed, limit ahead) from `customReservedRawData1`, `set_weights(..., v_ego=)` | `stop_profile` |
 | `openpilot/selfdrive/controls/lib/longitudinal_mpc_lib/long_mpc.py` | relaxed jerk factor 2.0, `get_low_speed_jerk_factor`, `set_weights` v_ego arg | `LOW_SPEED_JERK_FACTOR` |
 | `openpilot/selfdrive/controls/plannerd.py` | subscribes to `customReservedRawData1` with ignore_alive/valid | `customReservedRawData1` |
 | `openpilot/selfdrive/controls/tests/test_longcontrol.py` | tests for the stop/start changes | `TestLongControlSmoothStopGo` |
@@ -114,6 +114,18 @@ Overpass API. The queries and the bounding box are in the docstrings of
 `build_map.py` and `build_addresses.py`. Widen the box there to cover more area, run
 the two scripts, and commit the regenerated `.json.gz` files. Nothing on the device
 ever fetches map data.
+
+The public Overpass servers reject requests without a User-Agent and are often busy;
+`overpass.kumi.systems` tends to answer when `overpass-api.de` does not:
+
+```bash
+curl -A "TrietPilot-build-map/1.0" -o overpass.json --data-urlencode 'data=<query from build_map.py>' https://overpass.kumi.systems/api/interpreter
+python3 openpilot/selfdrive/navd/build_map.py overpass.json openpilot/selfdrive/navd/data/annarbor_ypsilanti.json.gz
+```
+
+The map file is version 2: it carries the area's time zone and, per way, any
+`maxspeed:conditional` school-zone rules parsed by `conditional_limit.py`. Version 1
+files still load, with no conditional limits.
 
 ## Running the fork's tests
 

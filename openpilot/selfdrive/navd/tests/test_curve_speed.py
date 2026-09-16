@@ -11,7 +11,7 @@ from openpilot.selfdrive.navd.build_map import build
 from openpilot.selfdrive.navd.offline_map import OfflineMap
 from openpilot.selfdrive.navd.curve_speed import (lookahead_points, curvatures, curve_speed, CurveSpeedFilter,
                                                   A_LAT_MAX, A_DECEL, MIN_CURVE_SPEED, RISE_RATE)
-from openpilot.selfdrive.controls.lib.longitudinal_planner import curve_speed_from_payload
+from openpilot.selfdrive.controls.lib.longitudinal_planner import map_speed_cap_from_payload
 
 LAT0, LON0 = 42.28, -83.74
 M_PER_DEG_LAT = 111000.0
@@ -164,7 +164,7 @@ class TestLookaheadFork(OpenpilotTestCase):
 
 class TestPayload(OpenpilotTestCase):
   def test_curve_speed_from_payload(self):
-    assert curve_speed_from_payload(b'{"valid": true, "curve_speed_kph": 40.5}') == 40.5
-    assert curve_speed_from_payload(b'{"valid": true}') is None
-    assert curve_speed_from_payload(b'{"valid": false, "curve_speed_kph": 40.5}') is None
-    assert curve_speed_from_payload(b'nope') is None
+    assert map_speed_cap_from_payload(b'{"valid": true, "curve_speed_kph": 40.5}') == 40.5
+    assert map_speed_cap_from_payload(b'{"valid": true}') is None
+    assert map_speed_cap_from_payload(b'{"valid": false, "curve_speed_kph": 40.5}') is None
+    assert map_speed_cap_from_payload(b'nope') is None
