@@ -29,6 +29,16 @@ The same thing over SSH:
 
 Add `--no-reboot` to update without rebooting, or run `python3 -m openpilot.system.self_update` to only check. If AGNOS ever needs a new version, flash it by hand; the launch script only prints a warning when the installed AGNOS does not match what the checkout expects.
 
+## Keeping up with upstream openpilot
+
+Every feature above lives in its own file or directory, and upstream files are touched only at a few small plug-in lines. [docs/TRIETPILOT.md](docs/TRIETPILOT.md) lists every file the fork owns, every upstream file it modifies with a grep marker for each change, and a conflict playbook.
+
+```bash
+scripts/upstream_sync.sh          # how far behind commaai/openpilot, and which files both sides touched
+scripts/upstream_sync.sh --merge  # merge upstream/master
+python3 scripts/test_fork.py      # run the fork's tests on any laptop, no native build needed
+```
+
 ## Upstream
 
 Everything else is unchanged from openpilot. See the [openpilot docs](https://docs.comma.ai) for setup, supported cars, and safety information.
