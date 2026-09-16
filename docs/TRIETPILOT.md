@@ -57,6 +57,7 @@ Check GitHub for updates → Update and reboot.
 | Navigation | `openpilot/selfdrive/navd/{router,navd,geocoder,build_addresses}.py`, `navd/data/annarbor_ypsilanti_addresses.json.gz`, `navd/tests/test_router.py`, `navd/tests/test_geocoder.py` |
 | Navigation UI | `openpilot/selfdrive/ui/lib/nav_helpers.py`, `openpilot/selfdrive/ui/onroad/nav_banner.py`, `openpilot/selfdrive/ui/layouts/settings/navigation.py`, `openpilot/selfdrive/ui/mici/layouts/settings/navigation.py` |
 | Self-update | `openpilot/system/self_update.py`, `openpilot/system/tests/test_self_update.py` |
+| Per-car tuning | `openpilot/selfdrive/car/fork_tuning.py`, `openpilot/selfdrive/car/tests/test_fork_tuning.py`. All fork longitudinal constants come from here; add a car by adding a dict keyed by its fingerprint. |
 | Fork tooling | `scripts/upstream_sync.sh`, `scripts/test_fork.py`, `scripts/update_now.sh`, `docs/TRIETPILOT.md` |
 
 ### Upstream files we modify, and exactly what to look for after a merge

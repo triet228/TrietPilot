@@ -51,31 +51,49 @@ _D_STEP = 0.1
 V_STOP_PRED = 0.5
 
 
-def schedule_decel(d):
+def schedule_decel(d, a_firm=A_FIRM, a_release=A_RELEASE):
   """Braking magnitude the schedule wants at distance d from the stop."""
   d = np.asarray(d, dtype=float)
-  far = A_FIRM * (D_FIRM / np.maximum(d, D_FIRM)) ** P_FAR
-  near = np.interp(d, [D_RELEASE, D_RELEASE + D_BLEND], [A_RELEASE, A_FIRM])
+  far = a_firm * (D_FIRM / np.maximum(d, D_FIRM)) ** P_FAR
+  near = np.interp(d, [D_RELEASE, D_RELEASE + D_BLEND], [a_release, a_firm])
   return np.where(d < D_FIRM, near, far)
 
 
-_D_GRID = np.arange(0.0, _D_MAX + _D_STEP, _D_STEP)
-_DECEL_GRID = schedule_decel(_D_GRID)
-# v_t^2(d) = 2 * integral_0^d decel(s) ds, trapezoid rule
-_V2_GRID = np.concatenate(([0.0], 2.0 * np.cumsum(0.5 * (_DECEL_GRID[1:] + _DECEL_GRID[:-1]) * _D_STEP)))
+class Schedule:
+  """The braking schedule for one (a_firm, a_release) pair with its integrated target speed curve."""
+
+  def __init__(self, a_firm=A_FIRM, a_release=A_RELEASE):
+    self.a_firm = a_firm
+    self.a_release = a_release
+    self.d_grid = np.arange(0.0, _D_MAX + _D_STEP, _D_STEP)
+    decel = schedule_decel(self.d_grid, a_firm, a_release)
+    # v_t^2(d) = 2 * integral_0^d decel(s) ds, trapezoid rule
+    self.v2_grid = np.concatenate(([0.0], 2.0 * np.cumsum(0.5 * (decel[1:] + decel[:-1]) * _D_STEP)))
+
+  def decel(self, d):
+    return float(schedule_decel(d, self.a_firm, self.a_release))
+
+  def target_speed(self, d):
+    """Speed the curve wants at distance d. Zero at or past the stop point."""
+    if d <= 0.0:
+      return 0.0
+    return float(np.sqrt(np.interp(d, self.d_grid, self.v2_grid)))
+
+  def profile_accel(self, v_ego, d_stop):
+    """Feedforward schedule braking plus capped proportional tracking of the curve."""
+    track = min(K_SPEED * (v_ego - self.target_speed(d_stop)), TRACK_MAX)
+    return -self.decel(d_stop) - track
+
+
+_DEFAULT_SCHEDULE = Schedule()
 
 
 def target_speed(d):
-  """Speed the curve wants at distance d. Zero at or past the stop point."""
-  if d <= 0.0:
-    return 0.0
-  return float(np.sqrt(np.interp(d, _D_GRID, _V2_GRID)))
+  return _DEFAULT_SCHEDULE.target_speed(d)
 
 
 def profile_accel(v_ego, d_stop):
-  """Feedforward schedule braking plus capped proportional tracking of the curve."""
-  track = min(K_SPEED * (v_ego - target_speed(d_stop)), TRACK_MAX)
-  return float(-schedule_decel(d_stop) - track)
+  return _DEFAULT_SCHEDULE.profile_accel(v_ego, d_stop)
 
 
 def stop_distance_from_model(model_v2):
@@ -99,9 +117,10 @@ def stop_distance_from_lead(lead, stop_distance):
 class StopProfile:
   """Stateful shaper: remembers its last output so brake build-up can be jerk limited."""
 
-  def __init__(self, dt=DT_DEFAULT):
+  def __init__(self, dt=DT_DEFAULT, a_firm=A_FIRM, a_release=A_RELEASE):
     self.dt = dt
     self.a_prev = None
+    self.schedule = Schedule(a_firm, a_release)
 
   def reset(self):
     self.a_prev = None
@@ -113,7 +132,7 @@ class StopProfile:
       return a_target
 
     # a stop is coming: the profile may coast or brake, never throttle
-    a_prof = min(profile_accel(v_ego, d_stop), accel_coast)
+    a_prof = min(self.schedule.profile_accel(v_ego, d_stop), accel_coast)
 
     # build brake gradually from wherever the car currently is. on the first
     # frame that is the plan's own accel, clipped to coast so a car under
@@ -124,7 +143,7 @@ class StopProfile:
 
     # in the release zone the profile is allowed to ease off the plan's braking,
     # unless the plan is braking hard, in which case it knows something we do not
-    if d_stop < D_RELEASE + D_BLEND and a_target > -A_FIRM:
+    if d_stop < D_RELEASE + D_BLEND and a_target > -self.schedule.a_firm:
       return float(a_prof)
 
     return float(min(a_target, a_prof))

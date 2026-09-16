@@ -14,6 +14,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import Longi
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, should_stop
 from openpilot.selfdrive.controls.lib.stop_profile import StopProfile, stop_distance_from_model, stop_distance_from_lead
+from openpilot.selfdrive.car.fork_tuning import tuning_for
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 
@@ -33,10 +34,10 @@ LAUNCH_LEAD_SPEED = 1.0  # m/s
 STANDSTILL_SPEED = 0.3  # m/s, matches should_stop()
 
 
-def hold_stop_for_lead(was_stopped, v_ego, lead):
+def hold_stop_for_lead(was_stopped, v_ego, lead, gap_hysteresis=LAUNCH_GAP_HYSTERESIS, lead_speed=LAUNCH_LEAD_SPEED):
   if not (was_stopped and v_ego < STANDSTILL_SPEED and lead.present):
     return False
-  lead_gone = lead.dRel > STOP_DISTANCE + LAUNCH_GAP_HYSTERESIS or lead.vLead > LAUNCH_LEAD_SPEED
+  lead_gone = lead.dRel > STOP_DISTANCE + gap_hysteresis or lead.vLead > lead_speed
   return not lead_gone
 
 # Lookup table for turns
@@ -94,7 +95,8 @@ class LongitudinalPlanner:
     self.output_a_target = init_a
     self.output_should_stop = False
     self.stop_distance = None
-    self.stop_profile = StopProfile(self.dt)
+    self.tuning = tuning_for(CP)
+    self.stop_profile = StopProfile(self.dt, self.tuning["stop_a_firm"], self.tuning["stop_a_release"])
     self.curve_speed_kph = None
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
@@ -180,7 +182,8 @@ class LongitudinalPlanner:
       candidates.append((output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e))
 
     output_a_target, self.mpc.source, _ = min(candidates, key=lambda c: c[0])
-    hold_stop = not reset_state and hold_stop_for_lead(self.output_should_stop, v_ego, sm['radarState'].leadOne)
+    hold_stop = not reset_state and hold_stop_for_lead(self.output_should_stop, v_ego, sm['radarState'].leadOne,
+                                                       self.tuning["launch_gap_hysteresis"], self.tuning["launch_lead_speed"])
     self.output_should_stop = hold_stop or any(should_stop for _, _, should_stop in candidates)
 
     # Smooth approach to a predicted stop. Red lights and stop signs only come from
