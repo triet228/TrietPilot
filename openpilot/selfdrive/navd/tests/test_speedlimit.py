@@ -9,7 +9,8 @@ from openpilot.common.constants import CV
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.navd.build_map import build, parse_maxspeed, parse_oneway, DEFAULT_SPEED_MPH
 from openpilot.selfdrive.navd.offline_map import OfflineMap, MAX_MATCH_DIST
-from openpilot.selfdrive.navd.speedlimitd import SpeedLimitTracker, cruise_target_kph, LOCAL_OFFSET_MPH, FREEWAY_OFFSET_MPH
+from openpilot.selfdrive.navd.speedlimitd import (SpeedLimitTracker, ExperimentalModeSwitcher, cruise_target_kph,
+                                                  LOCAL_OFFSET_MPH, FREEWAY_OFFSET_MPH)
 from openpilot.selfdrive.car.cruise import VCruiseHelper, parse_speed_limit_target, V_CRUISE_UNSET
 
 LAT0, LON0 = 42.28, -83.74
@@ -156,6 +157,33 @@ class TestSpeedLimitTracker(OpenpilotTestCase):
     self.tracker.update(LAT0 + 0.05, LON0, 90)
     p = self.tracker.update(LAT0 + 0.05, LON0, 90)
     assert p == {"valid": False}
+
+
+class FakeParams:
+  def __init__(self):
+    self.writes = []
+
+  def put_bool(self, key, value):
+    self.writes.append((key, value))
+
+
+class TestExperimentalModeSwitcher(OpenpilotTestCase):
+  def setup_method(self):
+    self.params = FakeParams()
+    self.sw = ExperimentalModeSwitcher(self.params)
+
+  def test_local_turns_experimental_on_freeway_off(self):
+    assert self.sw.update({"valid": True, "freeway": False}, True) is True
+    assert self.params.writes == [("ExperimentalMode", True)]
+    # same road type again: no rewrite, so a manual toggle would stick
+    assert self.sw.update({"valid": True, "freeway": False}, True) is None
+    assert self.sw.update({"valid": True, "freeway": True}, True) is False
+    assert self.params.writes[-1] == ("ExperimentalMode", False)
+
+  def test_off_map_and_disabled_do_nothing(self):
+    assert self.sw.update({"valid": False}, True) is None
+    assert self.sw.update({"valid": True, "freeway": False}, False) is None
+    assert self.params.writes == []
 
 
 class TestCruiseIntegration(OpenpilotTestCase):

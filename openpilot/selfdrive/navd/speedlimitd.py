@@ -15,12 +15,18 @@ file in this repo.
 
 A road change has to be seen on two consecutive matches before it is published,
 so parallel roads and overpasses do not make the limit flicker.
+
+When the AutoExperimentalMode param is on, the same road classification also
+drives the ExperimentalMode param: Experimental on local roads (so the car stops
+for lights and signs), chill on freeways. selfdrived re-reads that param about
+once a second.
 """
 
 import json
 
 from openpilot.cereal import messaging
 from openpilot.common.constants import CV
+from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.navd.offline_map import OfflineMap
@@ -78,6 +84,30 @@ class SpeedLimitTracker:
     }
 
 
+class ExperimentalModeSwitcher:
+  """Picks Experimental mode on local roads and chill mode on freeways.
+
+  Only acts on a change of road type, so a manual toggle on the screen sticks until
+  the next local/freeway transition. Nothing is written while the car is off the
+  map, or while the AutoExperimentalMode param is off.
+  """
+
+  def __init__(self, params):
+    self.params = params
+    self.last_applied = None
+
+  def update(self, payload, enabled):
+    """Returns the mode that was just written (True = experimental), or None if nothing changed."""
+    if not enabled or not payload.get("valid"):
+      return None
+    desired = not payload["freeway"]
+    if desired == self.last_applied:
+      return None
+    self.last_applied = desired
+    self.params.put_bool("ExperimentalMode", desired)
+    return desired
+
+
 def latest_fix(sm):
   """Most recent GPS fix from either receiver, or None."""
   best = None
@@ -97,6 +127,10 @@ def main():
   tracker = SpeedLimitTracker(OfflineMap())
   cloudlog.info("speedlimitd map loaded")
 
+  params = Params()
+  switcher = ExperimentalModeSwitcher(params)
+  auto_experimental = params.get_bool("AutoExperimentalMode")
+
   sm = messaging.SubMaster(["gpsLocation", "gpsLocationExternal"])
   pm = messaging.PubMaster(["customReservedRawData1"])
   rk = Ratekeeper(RATE)
@@ -109,6 +143,12 @@ def main():
     else:
       bearing = fix.bearingDeg if fix.speed > MIN_BEARING_SPEED else None
       payload = tracker.update(fix.latitude, fix.longitude, bearing)
+
+    if rk.frame % RATE == 0:
+      auto_experimental = params.get_bool("AutoExperimentalMode")
+    switched = switcher.update(payload, auto_experimental)
+    if switched is not None:
+      cloudlog.info(f"speedlimitd: {'experimental' if switched else 'chill'} mode on {payload.get('road') or 'unnamed road'}")
 
     msg = messaging.new_message("customReservedRawData1", valid=True)
     msg.customReservedRawData1 = json.dumps(payload, separators=(",", ":")).encode()
