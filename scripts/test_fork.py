@@ -27,6 +27,7 @@ FORK_TESTS = [
   "openpilot/selfdrive/controls/tests/test_longcontrol.py",
   "openpilot/selfdrive/controls/tests/test_longitudinal_planner.py",
   "openpilot/selfdrive/controls/tests/test_stop_profile.py",
+  "openpilot/selfdrive/controls/tests/test_auto_lane_change.py",
   "openpilot/selfdrive/navd/tests/test_speedlimit.py",
   "openpilot/selfdrive/navd/tests/test_router.py",
   "openpilot/selfdrive/navd/tests/test_curve_speed.py",

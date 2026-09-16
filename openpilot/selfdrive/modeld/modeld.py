@@ -29,7 +29,8 @@ from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 from openpilot.common.transformations.model import get_warp_matrix
-from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper, LaneChangeState
+from openpilot.selfdrive.controls.lib.auto_lane_change import AutoLaneChange, freeway_from_payload
 from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, should_stop, smooth_value, get_curvature_from_plan
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
@@ -279,7 +280,9 @@ def main(demo=False):
   # messaging
   pub_socks = ["modelV2", "drivingModelData", "cameraOdometry"] + (["chestnutGpuState"] if CHESTNUT else [])
   pm = PubMaster(pub_socks)
-  sm = SubMaster(["deviceState", "carState", "narrowRoadCameraState", "extrinsicsCalibration", "driverMonitoringState", "carControl", "lateralDelay"])
+  # customReservedRawData1 is speedlimitd's map payload, used for the fork's nudgeless lane change on freeways
+  sm = SubMaster(["deviceState", "carState", "narrowRoadCameraState", "extrinsicsCalibration", "driverMonitoringState", "carControl", "lateralDelay",
+                  "customReservedRawData1"])
 
   publish_state = PublishState()
   params = Params()
@@ -310,6 +313,8 @@ def main(demo=False):
   prev_action = log.ModelDataV2.Action()
 
   DH = DesireHelper()
+  ALC = AutoLaneChange()
+  nudgeless_lane_change = params.get_bool("NudgelessLaneChange")
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
@@ -424,7 +429,11 @@ def main(demo=False):
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
-      DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob)
+      if sm.frame % 100 == 0:
+        nudgeless_lane_change = params.get_bool("NudgelessLaneChange")
+      on_freeway = sm.alive['customReservedRawData1'] and freeway_from_payload(sm['customReservedRawData1'])
+      auto_start = ALC.update(DH.lane_change_state == LaneChangeState.preLaneChange, on_freeway, nudgeless_lane_change)
+      DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob, auto_start=auto_start)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
 

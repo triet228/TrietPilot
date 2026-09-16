@@ -21,7 +21,8 @@ class DesireHelper:
   def get_lane_change_direction(CS):
     return LaneChangeDirection.left if CS.leftBlinker else LaneChangeDirection.right
 
-  def update(self, carstate, lateral_active, lane_change_prob):
+  def update(self, carstate, lateral_active, lane_change_prob, auto_start=False):
+    # auto_start: fork nudgeless lane change (auto_lane_change.py) stands in for the steering nudge
     v_ego = carstate.vEgo
     one_blinker = carstate.leftBlinker != carstate.rightBlinker
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
@@ -52,7 +53,7 @@ class DesireHelper:
           self.lane_change_state = LaneChangeState.off
           self.lane_change_direction = LaneChangeDirection.none
           self.lane_change_timer = 0.0
-        elif torque_applied and not blindspot_detected:
+        elif (torque_applied or auto_start) and not blindspot_detected:
           self.lane_change_state = LaneChangeState.laneChangeStarting
           self.lane_change_timer = 0.0
 
