@@ -8,6 +8,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
+from openpilot.selfdrive.ui.onroad.nav_banner import NavBanner
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.cereal import log
 
@@ -119,6 +120,7 @@ class HudRenderer(Widget):
 
     self._turn_intent = TurnIntent()
     self._torque_bar = TorqueBar()
+    self._nav_banner = NavBanner()
 
     self._txt_wheel: rl.Texture = gui_app.texture('icons_mici/wheel.png', 50, 50)
     self._txt_wheel_critical: rl.Texture = gui_app.texture('icons_mici/wheel_critical.png', 50, 50)
@@ -188,6 +190,8 @@ class HudRenderer(Widget):
     self._draw_model_source(rect)
 
     self._draw_steering_wheel(rect)
+
+    self._nav_banner.render(rect)
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
     if ui_state.sm.recv_frame['selfdriveState'] < ui_state.started_frame:

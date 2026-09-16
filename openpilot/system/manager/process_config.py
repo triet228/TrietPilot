@@ -97,6 +97,7 @@ procs = [
   PythonProcess("deleter", "openpilot.system.loggerd.deleter", always_run),
   PythonProcess("incidentd", "openpilot.system.loggerd.incidentd", only_onroad),
   PythonProcess("speedlimitd", "openpilot.selfdrive.navd.speedlimitd", only_onroad),
+  PythonProcess("navd", "openpilot.selfdrive.navd.navd", only_onroad),
   PythonProcess("dmonitoringd", "openpilot.selfdrive.monitoring.dmonitoringd", driverview, enabled=(WEBCAM or not PC)),
   PythonProcess("qcomgpsd", "openpilot.system.qcomgpsd.qcomgpsd", qcomgps, enabled=COMMA_HARDWARE),
   PythonProcess("pandad", "openpilot.selfdrive.pandad.pandad", always_run),

@@ -4,6 +4,7 @@ from enum import IntEnum
 from collections.abc import Callable
 from openpilot.selfdrive.ui.layouts.settings.developer import DeveloperLayout
 from openpilot.selfdrive.ui.layouts.settings.device import DeviceLayout
+from openpilot.selfdrive.ui.layouts.settings.navigation import NavigationLayout
 from openpilot.selfdrive.ui.layouts.settings.software import SoftwareLayout
 from openpilot.selfdrive.ui.layouts.settings.toggles import TogglesLayout
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
@@ -34,7 +35,8 @@ class PanelType(IntEnum):
   NETWORK = 1
   TOGGLES = 2
   SOFTWARE = 3
-  DEVELOPER = 4
+  NAVIGATION = 4
+  DEVELOPER = 5
 
 
 @dataclass
@@ -58,6 +60,7 @@ class SettingsLayout(Widget):
       PanelType.NETWORK: PanelInfo(tr_noop("Network"), NetworkUI(wifi_manager)),
       PanelType.TOGGLES: PanelInfo(tr_noop("Toggles"), TogglesLayout()),
       PanelType.SOFTWARE: PanelInfo(tr_noop("Software"), SoftwareLayout()),
+      PanelType.NAVIGATION: PanelInfo(tr_noop("Navigation"), NavigationLayout()),
       PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayout()),
     }
 
