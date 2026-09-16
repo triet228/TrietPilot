@@ -6,6 +6,10 @@ Destinations come from params written by the UI:
   NavDestination  {"lat": .., "lon": .., "name": "Home"}   active target, cleared on arrival
   NavHome / NavWork  same shape, saved places the UI offers as one-press destinations
 
+With no destination set, the start of a drive near Home routes to Work and near Work
+routes to Home (auto_destination.py). That guess is dropped, not re-routed, when the
+car leaves its route.
+
 Every cycle (2 Hz) navd reads the GPS fix, keeps the car located along the
 current route, re-routes when the car has left it, and publishes a JSON status
 on customReservedRawData2 for the HUD banner:
@@ -38,6 +42,7 @@ from openpilot.selfdrive.navd.router import find_route, snap
 from openpilot.selfdrive.navd.speedlimitd import latest_fix, MIN_BEARING_SPEED
 from openpilot.selfdrive.navd.curve_speed import CurveSpeedFilter
 from openpilot.selfdrive.navd.turn_speed import turn_speed
+from openpilot.selfdrive.navd.auto_destination import auto_destination, WINDOW_S
 
 RATE = 2
 OFF_ROUTE_DIST = 40.0      # m from the route polyline before the car counts as off route
@@ -124,6 +129,12 @@ class Navigator:
     self.arrived_at = None
     self.turn_slowdown = True
     self.turn_filter = CurveSpeedFilter(1.0 / RATE)
+    # zero-tap Home/Work guess: once per drive, only in the first WINDOW_S after GPS comes up
+    self.auto_home_work = True
+    self.auto_decided = False
+    self.first_fix_t = None
+    self.auto_latlon = None
+    self.is_auto = False
 
   def _clear(self, status="idle"):
     self.route = None
@@ -151,8 +162,26 @@ class Navigator:
     self.status = "routing"
     cloudlog.info(f"navd: routed to {self.dest['name']}: {route.total_dist / 1609.34:.1f} mi, {route.total_time / 60:.0f} min")
 
+  def _guess_destination(self, fix, now):
+    """Writes NavDestination from the Home/Work geofence if this drive still allows a guess."""
+    if now - self.first_fix_t > WINDOW_S:
+      self.auto_decided = True
+      return None
+    guess = auto_destination(fix.latitude, fix.longitude, load_place(self.params, "NavHome"), load_place(self.params, "NavWork"))
+    if guess is None:
+      return None
+    self.params.put("NavDestination", guess)
+    self.auto_decided = True
+    self.auto_latlon = (guess["lat"], guess["lon"])
+    cloudlog.info(f"navd: starting near {'Home' if guess['name'] == 'Work' else 'Work'}, guessing {guess['name']}")
+    return guess
+
   def update(self, fix, now):
+    if fix is not None and self.first_fix_t is None:
+      self.first_fix_t = now
     dest = load_place(self.params, "NavDestination")
+    if dest is None and fix is not None and self.auto_home_work and not self.auto_decided:
+      dest = self._guess_destination(fix, now)
 
     if dest is None:
       if self.arrived_at is not None and now - self.arrived_at < ARRIVED_SHOW_TIME:
@@ -165,6 +194,7 @@ class Navigator:
 
     if self.dest is None or (dest["lat"], dest["lon"]) != (self.dest["lat"], self.dest["lon"]):
       self.dest = dest
+      self.is_auto = self.auto_latlon is not None and (dest["lat"], dest["lon"]) == self.auto_latlon
       self._clear("routing")
       self.arrived_at = None
 
@@ -196,6 +226,13 @@ class Navigator:
       if self.off_route_since is None:
         self.off_route_since = now
       elif now - self.off_route_since > OFF_ROUTE_TIME:
+        if self.is_auto:
+          # the guess was wrong (or the driver is going somewhere else): give up rather than nag
+          cloudlog.info(f"navd: left the guessed route to {self.dest['name']}, giving up navigation")
+          self.params.remove("NavDestination")
+          self.is_auto = False
+          self._clear("idle")
+          return self.payload()
         self.status = "off_route"
         if now - self.last_route_attempt >= REROUTE_COOLDOWN:
           self._plan(fix, now)
@@ -250,6 +287,7 @@ def main():
     sm.update(0)
     if rk.frame % RATE == 0:
       nav.turn_slowdown = params.get_bool("NavTurnSlowdown")
+      nav.auto_home_work = params.get_bool("NavAutoHomeWork")
     payload = nav.update(latest_fix(sm), time.monotonic())
     msg = messaging.new_message("customReservedRawData2", valid=True)
     msg.customReservedRawData2 = json.dumps(payload, separators=(",", ":")).encode()

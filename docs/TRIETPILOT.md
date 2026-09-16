@@ -54,7 +54,7 @@ Check GitHub for updates → Update and reboot.
 | Incident preservation | `openpilot/system/loggerd/incidentd.py`, `.../tests/test_incidentd.py` |
 | Stop profile | `openpilot/selfdrive/controls/lib/stop_profile.py`, `.../tests/test_stop_profile.py`, `.../tests/test_longitudinal_planner.py` |
 | Offline map, speed limit, curve speed, pre-slow for limit drops and school zones | `openpilot/selfdrive/navd/{offline_map,build_map,speedlimitd,curve_speed,limit_ahead,conditional_limit}.py`, `navd/data/annarbor_ypsilanti.json.gz`, `navd/tests/test_speedlimit.py`, `navd/tests/test_curve_speed.py`, `navd/tests/test_limit_ahead.py` |
-| Navigation, turn slowdown | `openpilot/selfdrive/navd/{router,navd,geocoder,build_addresses,turn_speed}.py`, `navd/data/annarbor_ypsilanti_addresses.json.gz`, `navd/tests/test_router.py`, `navd/tests/test_geocoder.py`, `navd/tests/test_turn_speed.py` |
+| Navigation, turn slowdown, Home/Work guess | `openpilot/selfdrive/navd/{router,navd,geocoder,build_addresses,turn_speed,auto_destination}.py`, `navd/data/annarbor_ypsilanti_addresses.json.gz`, `navd/tests/test_router.py`, `navd/tests/test_geocoder.py`, `navd/tests/test_turn_speed.py`, `navd/tests/test_auto_destination.py` |
 | Navigation UI | `openpilot/selfdrive/ui/lib/nav_helpers.py`, `openpilot/selfdrive/ui/onroad/nav_banner.py`, `openpilot/selfdrive/ui/layouts/settings/navigation.py`, `openpilot/selfdrive/ui/mici/layouts/settings/navigation.py` |
 | Nudgeless lane change | `openpilot/selfdrive/controls/lib/auto_lane_change.py`, `.../tests/test_auto_lane_change.py` |
 | Self-update | `openpilot/system/self_update.py`, `openpilot/system/tests/test_self_update.py` |
@@ -70,7 +70,7 @@ Check GitHub for updates → Update and reboot.
 | `openpilot/system/manager/process_config.py` | added `incidentd`, `drivebrowserd`, `speedlimitd`, `navd`; removed `manage_athenad`, `uploader`, `updated` | `speedlimitd` |
 | `openpilot/system/manager/manager.py` | dongle id read locally, no `register()` call, no athena ignore list, `apply_presets` after the defaults loop | `never talks to` |
 | `openpilot/system/manager/test/test_manager.py` | blacklist without `manage_athenad` | `BLACKLIST_PROCS` |
-| `openpilot/common/params_keys.h` | `SpeedLimitCruise`, `AutoExperimentalMode`, `NudgelessLaneChange`, `NavTurnSlowdown`, `NavDestination`, `NavHome`, `NavWork` | `NavDestination` |
+| `openpilot/common/params_keys.h` | `SpeedLimitCruise`, `AutoExperimentalMode`, `NudgelessLaneChange`, `NavTurnSlowdown`, `NavAutoHomeWork`, `NavDestination`, `NavHome`, `NavWork` | `NavDestination` |
 | `openpilot/cereal/services.py` | `customReservedRawData1` (5 Hz) and `customReservedRawData2` (2 Hz) | `customReservedRawData1` |
 | `openpilot/selfdrive/controls/controlsd.py` | `latActive` also false on `overrideLateral` | `override_lateral` |
 | `openpilot/selfdrive/controls/lib/desire_helper.py` | `auto_start` argument stands in for the steering nudge | `auto_start` |

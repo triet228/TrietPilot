@@ -27,6 +27,7 @@ PRESETS = {
   "AutoExperimentalMode": True,   # Experimental on local roads, chill on freeways
   "NudgelessLaneChange": True,    # signal-only lane change on freeways
   "NavTurnSlowdown": True,        # slow ahead of navigation turns
+  "NavAutoHomeWork": True,        # leaving Home routes to Work and back, no button press
 
   # upstream toggles, as they appear in the Toggles panel
   "OpenpilotEnabledToggle": True,
