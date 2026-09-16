@@ -19,8 +19,11 @@ def main():
   ldw = LaneDepartureWarning()
   longitudinal_planner = LongitudinalPlanner(CP)
   pm = messaging.PubMaster(['longitudinalPlan', 'driverAssistance'])
-  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'vehicleParameters', 'radarState', 'modelV2', 'selfdriveState'],
-                           poll='modelV2')
+  # customReservedRawData1 is the optional map payload from speedlimitd (curve speed); the plan must stay valid without it
+  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'vehicleParameters', 'radarState', 'modelV2', 'selfdriveState',
+                            'customReservedRawData1'],
+                           poll='modelV2', ignore_alive=['customReservedRawData1'], ignore_avg_freq=['customReservedRawData1'],
+                           ignore_valid=['customReservedRawData1'])
 
   while True:
     sm.update()

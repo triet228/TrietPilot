@@ -6,7 +6,11 @@ Matches GPS position against the offline map at 5 Hz and publishes a small
 JSON blob on customReservedRawData1:
 
   {"valid": true, "limit_mph": 45, "target_kph": 88.5, "freeway": false,
-   "road": "Washtenaw Avenue", "explicit": true}
+   "road": "Washtenaw Avenue", "explicit": true, "curve_speed_kph": 62.3}
+
+curve_speed_kph is the map-based curve speed cap from curve_speed.py, present only
+while moving with a valid bearing and a bend somewhere in the look-ahead. The
+longitudinal planner takes the minimum of it and the set speed.
 
 target = limit + LOCAL_OFFSET_MPH on ordinary roads, limit + FREEWAY_OFFSET_MPH
 on motorways and trunks. card.py applies the target as the set speed when the
@@ -30,6 +34,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.navd.offline_map import OfflineMap
+from openpilot.selfdrive.navd.curve_speed import lookahead_points, curve_speed, CurveSpeedFilter
 
 RATE = 5
 LOCAL_OFFSET_MPH = 10
@@ -53,10 +58,18 @@ class SpeedLimitTracker:
     self.map = offline_map
     self.way_idx = None
     self.pending_way = None
+    self.curve_filter = CurveSpeedFilter(1.0 / RATE)
+    self.curve_speed_ms = None
 
-  def update(self, lat, lon, bearing):
+  def update(self, lat, lon, bearing, personality=1):
     match = self.map.match(lat, lon, bearing)
     new_way = match.way_idx if match is not None else None
+
+    # curve speed needs the travel direction, so only when moving with a bearing
+    v_curve = None
+    if match is not None and bearing is not None:
+      v_curve = curve_speed(lookahead_points(self.map, match), personality)
+    self.curve_speed_ms = self.curve_filter.update(v_curve)
 
     if new_way == self.way_idx:
       self.pending_way = None
@@ -74,7 +87,7 @@ class SpeedLimitTracker:
       return {"valid": False}
     limit = self.map.speed_limit_mph(self.way_idx)
     freeway = self.map.is_freeway(self.way_idx)
-    return {
+    p = {
       "valid": True,
       "limit_mph": limit,
       "target_kph": cruise_target_kph(limit, freeway),
@@ -82,6 +95,9 @@ class SpeedLimitTracker:
       "road": self.map.road_name(self.way_idx),
       "explicit": bool(self.map.ways[self.way_idx]["x"]),
     }
+    if self.curve_speed_ms is not None:
+      p["curve_speed_kph"] = round(self.curve_speed_ms * CV.MS_TO_KPH, 1)
+    return p
 
 
 class ExperimentalModeSwitcher:
@@ -130,6 +146,7 @@ def main():
   params = Params()
   switcher = ExperimentalModeSwitcher(params)
   auto_experimental = params.get_bool("AutoExperimentalMode")
+  personality = int(params.get("LongitudinalPersonality") or 1)
 
   sm = messaging.SubMaster(["gpsLocation", "gpsLocationExternal"])
   pm = messaging.PubMaster(["customReservedRawData1"])
@@ -142,10 +159,11 @@ def main():
       payload = {"valid": False}
     else:
       bearing = fix.bearingDeg if fix.speed > MIN_BEARING_SPEED else None
-      payload = tracker.update(fix.latitude, fix.longitude, bearing)
+      payload = tracker.update(fix.latitude, fix.longitude, bearing, personality)
 
     if rk.frame % RATE == 0:
       auto_experimental = params.get_bool("AutoExperimentalMode")
+      personality = int(params.get("LongitudinalPersonality") or 1)
     switched = switcher.update(payload, auto_experimental)
     if switched is not None:
       cloudlog.info(f"speedlimitd: {'experimental' if switched else 'chill'} mode on {payload.get('road') or 'unnamed road'}")

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import math
 import numpy as np
 
@@ -42,6 +43,18 @@ def hold_stop_for_lead(was_stopped, v_ego, lead):
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
+def curve_speed_from_payload(raw):
+  """Curve speed cap in kph from the speedlimitd payload, or None when absent or invalid."""
+  try:
+    payload = json.loads(bytes(raw))
+  except (ValueError, TypeError):
+    return None
+  if not payload.get("valid"):
+    return None
+  v = payload.get("curve_speed_kph")
+  return float(v) if isinstance(v, (int, float)) else None
+
+
 def get_max_accel(v_ego):
   return np.interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
 
@@ -82,6 +95,7 @@ class LongitudinalPlanner:
     self.output_should_stop = False
     self.stop_distance = None
     self.stop_profile = StopProfile(self.dt)
+    self.curve_speed_kph = None
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -98,6 +112,14 @@ class LongitudinalPlanner:
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
     if sm['controlsState'].forceDecel:
       v_cruise = 0.0
+
+    # map-based curve speed from speedlimitd: only ever lowers the cruise target ahead of bends
+    if sm.updated['customReservedRawData1']:
+      self.curve_speed_kph = curve_speed_from_payload(sm['customReservedRawData1'])
+    if not sm.alive['customReservedRawData1']:
+      self.curve_speed_kph = None
+    if self.curve_speed_kph is not None:
+      v_cruise = min(v_cruise, self.curve_speed_kph * CV.KPH_TO_MS)
 
     long_control_off = sm['controlsState'].longControlState == LongCtrlState.off
 
