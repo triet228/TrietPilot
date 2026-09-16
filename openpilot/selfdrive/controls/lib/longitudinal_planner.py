@@ -12,6 +12,7 @@ from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, LongitudinalPlanSource, STOP_DISTANCE
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, should_stop
+from openpilot.selfdrive.controls.lib.stop_profile import StopProfile, stop_distance_from_model, stop_distance_from_lead
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 
@@ -79,6 +80,8 @@ class LongitudinalPlanner:
     self.a_cruise = init_a
     self.output_a_target = init_a
     self.output_should_stop = False
+    self.stop_distance = None
+    self.stop_profile = StopProfile(self.dt)
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -157,6 +160,20 @@ class LongitudinalPlanner:
     output_a_target, self.mpc.source, _ = min(candidates, key=lambda c: c[0])
     hold_stop = not reset_state and hold_stop_for_lead(self.output_should_stop, v_ego, sm['radarState'].leadOne)
     self.output_should_stop = hold_stop or any(should_stop for _, _, should_stop in candidates)
+
+    # Smooth approach to a predicted stop. Red lights and stop signs only come from
+    # the e2e model, so that source is used in experimental mode only; a stopped lead
+    # counts in both modes.
+    stop_dists = [stop_distance_from_lead(sm['radarState'].leadOne, STOP_DISTANCE)]
+    if sm['selfdriveState'].experimentalMode:
+      stop_dists.append(stop_distance_from_model(sm['modelV2']))
+    stop_dists = [d for d in stop_dists if d is not None]
+    self.stop_distance = min(stop_dists) if stop_dists else None
+    if reset_state:
+      self.stop_profile.reset()
+    else:
+      output_a_target = self.stop_profile.update(output_a_target, v_ego, self.stop_distance, accel_coast)
+
     self.output_a_target = np.clip(output_a_target, ACCEL_MIN, ACCEL_MAX)
 
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.output_a_target + a_prev) / 2.0
