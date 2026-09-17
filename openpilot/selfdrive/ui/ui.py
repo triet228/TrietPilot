@@ -9,8 +9,22 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.main import MainLayout
 from openpilot.selfdrive.ui.mici.layouts.main import MiciMainLayout
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.screen_recorder import ScreenRecorder
 
 BIG_UI = gui_app.big_ui()
+
+
+def make_screen_recorder():
+  """TrietPilot: record the screen into the current segment when RecordScreen is set."""
+  from openpilot.common.params import Params
+  from openpilot.common.hardware.hw import Paths
+  params = Params()
+  if not params.get_bool("RecordScreen"):
+    return None
+
+  def current_route():
+    return params.get("CurrentRoute") if params.get_bool("IsOnroad") else None
+  return ScreenRecorder(Paths.log_root(), current_route, gui_app.width, gui_app.height)
 
 
 def main():
@@ -18,7 +32,12 @@ def main():
   # above plannerd and radard
   config_realtime_process(0, Priority.CTRL_HIGH)
 
+  screen_recorder = make_screen_recorder()
+  if screen_recorder is not None:
+    gui_app.set_screen_recorder(screen_recorder)
   gui_app.init_window("UI")
+  if screen_recorder is not None and not screen_recorder.start():
+    gui_app.set_screen_recorder(None)
   if BIG_UI:
     MainLayout()
   else:

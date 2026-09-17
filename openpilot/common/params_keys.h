@@ -38,6 +38,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"NudgelessLaneChange", {PERSISTENT, BOOL, "1"}},
     {"NavTurnSlowdown", {PERSISTENT, BOOL, "1"}},
     {"NavAutoHomeWork", {PERSISTENT, BOOL, "1"}},
+    {"RecordScreen", {PERSISTENT, BOOL, "1"}},
     {"NavDestination", {PERSISTENT, JSON}},
     {"NavHome", {PERSISTENT, JSON}},
     {"NavWork", {PERSISTENT, JSON}},

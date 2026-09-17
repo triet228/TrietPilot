@@ -60,6 +60,7 @@ Check GitHub for updates → Update and reboot.
 | Self-update | `openpilot/system/self_update.py`, `openpilot/system/tests/test_self_update.py` |
 | Settings presets | `openpilot/system/fork_presets.py`, `openpilot/system/tests/test_fork_presets.py`. The table of every setting, applied by manager on each boot. |
 | Drive browser, kept footage | `openpilot/system/drive_browser.py`, `openpilot/system/tests/test_drive_browser.py`, `openpilot/system/loggerd/keep.py`, `openpilot/system/loggerd/tests/test_keep.py` |
+| Screen recording | `openpilot/selfdrive/ui/screen_recorder.py`, `openpilot/selfdrive/ui/tests/test_screen_recorder.py`. Pipes the UI framebuffer to ffmpeg as `screen.mp4` in the current segment. |
 | Per-car tuning | `openpilot/selfdrive/car/fork_tuning.py`, `openpilot/selfdrive/car/tests/test_fork_tuning.py`. All fork longitudinal constants come from here; add a car by adding a dict keyed by its fingerprint. |
 | Fork tooling | `scripts/upstream_sync.sh`, `scripts/test_fork.py`, `scripts/update_now.sh`, `docs/TRIETPILOT.md` |
 
@@ -70,7 +71,7 @@ Check GitHub for updates → Update and reboot.
 | `openpilot/system/manager/process_config.py` | added `incidentd`, `drivebrowserd`, `speedlimitd`, `navd`; removed `manage_athenad`, `uploader`, `updated` | `speedlimitd` |
 | `openpilot/system/manager/manager.py` | dongle id read locally, no `register()` call, no athena ignore list, `apply_presets` after the defaults loop | `never talks to` |
 | `openpilot/system/manager/test/test_manager.py` | blacklist without `manage_athenad` | `BLACKLIST_PROCS` |
-| `openpilot/common/params_keys.h` | `SpeedLimitCruise`, `AutoExperimentalMode`, `NudgelessLaneChange`, `NavTurnSlowdown`, `NavAutoHomeWork`, `NavDestination`, `NavHome`, `NavWork` | `NavDestination` |
+| `openpilot/common/params_keys.h` | `SpeedLimitCruise`, `AutoExperimentalMode`, `NudgelessLaneChange`, `NavTurnSlowdown`, `NavAutoHomeWork`, `RecordScreen`, `NavDestination`, `NavHome`, `NavWork` | `NavDestination` |
 | `openpilot/cereal/services.py` | `customReservedRawData1` (5 Hz) and `customReservedRawData2` (2 Hz) | `customReservedRawData1` |
 | `openpilot/selfdrive/controls/controlsd.py` | `latActive` also false on `overrideLateral` | `override_lateral` |
 | `openpilot/selfdrive/controls/lib/desire_helper.py` | `auto_start` argument stands in for the steering nudge | `auto_start` |
@@ -84,6 +85,8 @@ Check GitHub for updates → Update and reboot.
 | `openpilot/selfdrive/car/card.py` | subscribes `customReservedRawData1`, calls `apply_speed_limit_target`, reads `SpeedLimitCruise` | `speed_limit_target_kph` |
 | `openpilot/system/loggerd/deleter.py` | `MAX_LOG_BYTES` cap, `get_log_root_bytes`, kept segments (`keep.protected_kept`) deleted last | `MAX_LOG_BYTES` |
 | `openpilot/system/loggerd/tests/test_deleter.py` | cap test | `test_delete_when_over_cap` |
+| `openpilot/selfdrive/ui/ui.py` | `make_screen_recorder`, handed to `gui_app` before `init_window` | `make_screen_recorder` |
+| `openpilot/system/ui/lib/application.py` | `set_screen_recorder`; render texture forced on, one `grab` per recorder tick after `end_drawing`, `stop` in `close` | `_screen_recorder` |
 | `openpilot/selfdrive/ui/ui_state.py` | subscribes `gpsLocation`, `customReservedRawData1/2` | `customReservedRawData2` |
 | `openpilot/selfdrive/ui/onroad/hud_renderer.py`, `.../mici/onroad/hud_renderer.py` | `NavBanner` created and rendered | `NavBanner` |
 | `openpilot/selfdrive/ui/layouts/settings/settings.py`, `.../mici/layouts/settings/settings.py` | Navigation panel added, Firehose removed | `Navigation` |

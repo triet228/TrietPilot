@@ -18,7 +18,8 @@ class FakeParams:
 
 class TestForkPresets(OpenpilotTestCase):
   def test_table_covers_every_fork_param(self):
-    for key in ("SpeedLimitCruise", "AutoExperimentalMode", "NudgelessLaneChange", "NavTurnSlowdown"):
+    for key in ("SpeedLimitCruise", "AutoExperimentalMode", "NudgelessLaneChange", "NavTurnSlowdown",
+                "RecordFront", "RecordAudio", "RecordScreen"):
       assert fp.PRESETS[key] is True
     assert "ExperimentalMode" not in fp.PRESETS  # managed by speedlimitd
 

@@ -239,6 +239,7 @@ class GuiApplication:
     self._ffmpeg_queue: queue.Queue | None = None
     self._ffmpeg_thread: threading.Thread | None = None
     self._ffmpeg_stop_event: threading.Event | None = None
+    self._screen_recorder = None  # TrietPilot dashcam screen recording, see selfdrive/ui/screen_recorder.py
     self._textures: dict[str, rl.Texture] = {}
     self._target_fps: int = _DEFAULT_FPS
     self._last_fps_log_time: float = time.monotonic()
@@ -284,6 +285,10 @@ class GuiApplication:
   def request_close(self):
     self._window_close_requested = True
 
+  def set_screen_recorder(self, recorder):
+    """Call before init_window: the recorder needs the offscreen render texture to read frames back."""
+    self._screen_recorder = recorder
+
   def init_window(self, title: str, fps: int = _DEFAULT_FPS):
     with self._startup_profile_context():
       def _close(sig, frame):
@@ -299,7 +304,7 @@ class GuiApplication:
 
       rl.init_window(self._scaled_width, self._scaled_height, title)
 
-      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or RECORD
+      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or RECORD or self._screen_recorder is not None
       if self._scale != 1.0:
         rl.set_mouse_scale(1 / self._scale, 1 / self._scale)
       if needs_render_texture:
@@ -566,6 +571,10 @@ class GuiApplication:
     if not rl.is_window_ready():
       return
 
+    if self._screen_recorder is not None:
+      self._screen_recorder.stop()
+      self._screen_recorder.release_gl()
+
     for texture in self._textures.values():
       rl.unload_texture(texture)
     self._textures = {}
@@ -686,6 +695,9 @@ class GuiApplication:
           data = bytes(rl.ffi.buffer(image.data, data_size))
           self._ffmpeg_queue.put(data)  # Async write via background thread
           rl.unload_image(image)
+
+        if self._screen_recorder is not None and self._screen_recorder.capture_due():
+          self._screen_recorder.submit(self._screen_recorder.grab(self._render_texture.texture))
 
         self._monitor_fps()
         self._frame += 1

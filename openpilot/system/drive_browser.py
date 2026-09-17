@@ -4,7 +4,8 @@
 
 A small web server on the device (port 8080) lists every recorded route with its
 segments, preserved incidents first, and offers a Play and a Download button per
-segment plus links to the raw files. Join the device's hotspot and open
+segment plus links to the raw files, including the cabin camera and the screen recording
+(screen.mp4, written by the UI, plays in the browser as is). Join the device's hotspot and open
 
   http://192.168.43.1:8080
 
@@ -49,7 +50,7 @@ from openpilot.system.loggerd import keep
 PORT = 8080
 SEGMENT_RE = re.compile(r"^([A-Za-z0-9_-]+?)--(\d+)$")
 ROUTE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-RAW_FILES = ("fcamera.hevc", "ecamera.hevc", "dcamera.hevc", "qcamera.ts", "rlog.zst", "qlog.zst")
+RAW_FILES = ("fcamera.hevc", "ecamera.hevc", "dcamera.hevc", "qcamera.ts", "screen.mp4", "rlog.zst", "qlog.zst")
 CONTENT_TYPES = {".mp4": "video/mp4", ".ts": "video/mp2t", ".hevc": "application/octet-stream", ".zst": "application/zstd"}
 PRESERVE_ATTR = "user.preserve"  # set by loggerd on a userBookmark, honoured by deleter
 SEGMENT_LENGTH = 60               # s, mirrors system/loggerd/config.py without importing the hardware layer

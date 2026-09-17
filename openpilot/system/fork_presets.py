@@ -35,8 +35,9 @@ PRESETS = {
   "IsLdwEnabled": True,             # lane departure warnings while disengaged
   "AlwaysOnDM": False,              # driver monitoring only while engaged
   "IsMetric": False,                # mph
-  "RecordFront": False,             # no driver camera recording
-  "RecordAudio": False,             # no microphone in the dashcam
+  "RecordFront": True,              # cabin camera saved as dcamera.hevc next to the road cameras
+  "RecordAudio": True,              # microphone mixed into the qcamera dashcam clip
+  "RecordScreen": True,             # fork: the UI saved as screen.mp4 in the same segment
   "LongitudinalPersonality": 1,     # 0 aggressive, 1 standard, 2 relaxed
 }
 

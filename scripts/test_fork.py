@@ -40,6 +40,7 @@ FORK_TESTS = [
   "openpilot/system/tests/test_drive_browser.py",
   "openpilot/system/tests/test_fork_presets.py",
   "openpilot/system/loggerd/tests/test_keep.py",
+  "openpilot/selfdrive/ui/tests/test_screen_recorder.py",
   "openpilot/selfdrive/car/tests/test_fork_tuning.py",
 ]
 
