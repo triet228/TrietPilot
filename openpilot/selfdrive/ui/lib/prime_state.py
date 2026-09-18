@@ -1,3 +1,5 @@
+# openpilot/selfdrive/ui/lib/prime_state.py
+
 from enum import IntEnum
 import os
 import threading
@@ -16,6 +18,12 @@ class PrimeType(IntEnum):
   PURPLE = 5
 
 
+class Provider(str):
+  GOOGLE = "google"
+  GITHUB = "github"
+  APPLE = "apple"
+
+
 class PrimeState:
   """Offline stand-in for the comma prime status.
 
@@ -29,6 +37,10 @@ class PrimeState:
     self._params = Params()
     self._lock = threading.Lock()
     self.prime_type = self._load_initial_state()
+    self._prime_trial_available = False
+    self._commacare = False
+    self._pairing_provider = os.getenv("PAIRING_PROVIDER") or self._params.get("PairingProvider")
+    self._pairing_email = self._params.get("PairingEmail")
 
   def _load_initial_state(self):
     prime_type_str = os.getenv("PRIME_TYPE") or self._params.get("PrimeType")
@@ -66,3 +78,21 @@ class PrimeState:
   def is_paired(self):
     with self._lock:
       return self.prime_type > PrimeType.UNPAIRED
+
+  def can_claim_prime_trial(self):
+    return False
+
+  def has_commacare(self):
+    return False
+
+  def get_pairing_provider(self):
+    with self._lock:
+      return self._pairing_provider if self.prime_type > PrimeType.UNPAIRED else None
+
+  def get_pairing_account(self):
+    with self._lock:
+      if self.prime_type <= PrimeType.UNPAIRED or not self._pairing_provider:
+        return "unknown"
+      if self._pairing_provider == Provider.GITHUB or not self._pairing_email:
+        return f"{self._pairing_provider} account"
+      return self._pairing_email
