@@ -30,8 +30,9 @@ class UpdateError(Exception):
 
 def _git(*args, timeout=GIT_TIMEOUT):
   try:
+    # The optional Chestnut model is stored in Hugging Face LFS; ordinary device updates must not prompt for it.
     out = subprocess.run(["git", *args], cwd=BASEDIR, capture_output=True, text=True, timeout=timeout,
-                         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+                         env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1"})
   except (OSError, subprocess.TimeoutExpired) as e:
     raise UpdateError(str(e)) from e
   if out.returncode != 0:

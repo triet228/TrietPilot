@@ -36,6 +36,8 @@ This fork never talks to comma's servers. The device does not register, upload d
 
 Updates come from this repo on GitHub and nowhere else. Connect the device to Wi-Fi in the Network panel, open the Software panel, and press **Check GitHub for updates**. It fetches and reports how many commits you are behind. Press **Update and reboot** to reset the checkout to the latest commit, sync submodules, and reboot; the launch script rebuilds on the way back up. Local edits on the device are discarded by an update, and the check tells you if there are any. The car must be off.
 
+The updater skips the optional Chestnut eGPU model stored in Hugging Face LFS, so a normal device update does not request Hugging Face credentials. Chestnut users must fetch that model separately.
+
 The same thing over SSH:
 
 ```bash
