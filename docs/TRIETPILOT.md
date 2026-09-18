@@ -1,7 +1,7 @@
 # TrietPilot fork guide
 
 How this fork is organized, what it owns, and how to pull in new upstream openpilot
-releases without losing anything. Read this before every upstream merge.
+releases without losing anything. Read this before every upstream sync.
 
 ## The one rule
 
@@ -14,20 +14,26 @@ same few lines in the new upstream shape.
 ## Syncing with upstream
 
 ```bash
-scripts/upstream_sync.sh          # how far behind, and which files both sides touched
-scripts/upstream_sync.sh --merge  # merge upstream/master
+scripts/upstream_sync.sh          # new upstream commits and likely conflicts
+scripts/upstream_sync.sh --sync   # apply new upstream commits
 python3 scripts/test_fork.py      # the fork's tests, runs on a laptop with no native build
 ```
 
-Merge, do not rebase. History is pushed and the device pulls with a hard reset, so
-rewriting it would strand the device.
+The fork's history has rewritten commit IDs to remove Claude coauthor trailers.
+`scripts/upstream_base.txt` records the last upstream commit applied. The sync helper
+cherry-picks only later upstream commits and skips LFS downloads, so it does not
+restore the old upstream history. If a pick conflicts, resolve it, run
+`git cherry-pick --continue` until the sequence finishes, then run
+`scripts/upstream_sync.sh --record`. Keep fork-specific offline behavior when
+resolving conflicts. The pairing reminder from upstream commit `8abd13363` was
+intentionally omitted because this fork never polls comma's pairing service.
 
-After a merge that touched anything under `selfdrive/controls`, drive a parking lot
-before traffic. After a merge that touched the UI, look at the Navigation and Software
+After a sync that touched anything under `selfdrive/controls`, drive a parking lot
+before traffic. After a sync that touched the UI, look at the Navigation and Software
 panels and the onroad banner on the device. Then push, and on the device use Software →
 Check GitHub for updates → Update and reboot.
 
-## Post-merge checklist
+## Post-sync checklist
 
 - `python3 scripts/test_fork.py` is green.
 - `ruff check` on the files listed below is clean.
@@ -45,7 +51,7 @@ Check GitHub for updates → Update and reboot.
 
 ## Files the fork owns
 
-`scripts/upstream_sync.sh --files` prints the live list. Snapshot at the time of writing:
+`scripts/upstream_sync.sh --files` prints the current differences from upstream. Snapshot at the time of writing:
 
 ### New files (no upstream counterpart, never conflict)
 
@@ -62,9 +68,9 @@ Check GitHub for updates → Update and reboot.
 | Drive browser, kept footage | `openpilot/system/drive_browser.py`, `openpilot/system/tests/test_drive_browser.py`, `openpilot/system/loggerd/keep.py`, `openpilot/system/loggerd/tests/test_keep.py` |
 | Screen recording | `openpilot/selfdrive/ui/screen_recorder.py`, `openpilot/selfdrive/ui/tests/test_screen_recorder.py`. Pipes the UI framebuffer to ffmpeg as `screen.mp4` in the current segment. |
 | Per-car tuning | `openpilot/selfdrive/car/fork_tuning.py`, `openpilot/selfdrive/car/tests/test_fork_tuning.py`. All fork longitudinal constants come from here; add a car by adding a dict keyed by its fingerprint. |
-| Fork tooling | `scripts/upstream_sync.sh`, `scripts/test_fork.py`, `scripts/update_now.sh`, `docs/TRIETPILOT.md` |
+| Fork tooling | `scripts/upstream_sync.sh`, `scripts/upstream_base.txt`, `scripts/test_fork.py`, `scripts/update_now.sh`, `docs/TRIETPILOT.md` |
 
-### Upstream files we modify, and exactly what to look for after a merge
+### Upstream files we modify, and exactly what to look for after a sync
 
 | File | What we changed | Marker to grep for |
 |---|---|---|
@@ -98,7 +104,7 @@ Check GitHub for updates → Update and reboot.
 ### Deleted upstream files
 
 `openpilot/selfdrive/ui/layouts/settings/firehose.py` and the mici equivalent. If upstream
-edits them the merge will say "deleted by us"; keep them deleted with `git rm`.
+edits them a cherry-pick may report a deletion conflict; keep them deleted with `git rm`.
 
 ## Conflict playbook
 
