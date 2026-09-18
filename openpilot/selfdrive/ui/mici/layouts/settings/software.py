@@ -1,54 +1,31 @@
+# openpilot/selfdrive/ui/mici/layouts/settings/software.py
+
 import threading
-import pyray as rl
 
 from openpilot.selfdrive.ui.mici.layouts.settings.device import EngagedConfirmationButton
+from openpilot.selfdrive.ui.mici.widgets.info import InfoLayoutMici
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.self_update import check as update_check, apply as update_apply, UpdateError
-from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
+from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.system.ui.lib.multilang import tr
-from openpilot.system.ui.widgets import Widget
-from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets.scroller import NavScroller
 
 
-class SoftwareInfoLayoutMici(Widget):
-  """Version and branch of the running checkout."""
+class SoftwareInfoLayoutMici(InfoLayoutMici):
+  """Show the running fork version, branch, and commit."""
 
   def __init__(self):
-    super().__init__()
-
-    self.set_rect(rl.Rectangle(0, 0, 360, 180))
-
-    subheader_color = rl.Color(255, 255, 255, int(255 * 0.9 * 0.65))
-    max_width = int(self._rect.width - 20)
-    self._version_label = UnifiedLabel("version", 48, max_width=max_width, font_weight=FontWeight.DISPLAY, wrap_text=False)
-    self._version_text_label = UnifiedLabel("", 36, max_width=max_width, text_color=subheader_color,
-                                            font_weight=FontWeight.ROMAN, wrap_text=False)
-
-    self._branch_label = UnifiedLabel("branch", 48, max_width=max_width, font_weight=FontWeight.DISPLAY, wrap_text=False)
-    self._branch_text_label = UnifiedLabel("", 36, max_width=max_width, text_color=subheader_color,
-                                           font_weight=FontWeight.ROMAN, wrap_text=False, scroll=True)
+    super().__init__("version", "", "branch", "")
 
   def _update_state(self):
     params = ui_state.params
     commit = (params.get("GitCommit") or "")[:8]
-    self._version_text_label.set_text(params.get("Version") or "N/A")
-    self._branch_text_label.set_text(f"{params.get('GitBranch') or 'N/A'} ({commit})" if commit else params.get("GitBranch") or "N/A")
-
-  def _render(self, _):
-    self._version_label.set_position(self._rect.x + 20, self._rect.y - 10)
-    self._version_label.render()
-
-    self._version_text_label.set_position(self._rect.x + 20, self._rect.y + 68 - 25)
-    self._version_text_label.render()
-
-    self._branch_label.set_position(self._rect.x + 20, self._rect.y + 114 - 30)
-    self._branch_label.render()
-
-    self._branch_text_label.set_position(self._rect.x + 20, self._rect.y + 161 - 25)
-    self._branch_text_label.render()
+    super()._update_state()
+    self.subtext1.set_text(params.get("Version") or "N/A")
+    branch = params.get("GitBranch") or "N/A"
+    self.subtext2.set_text(f"{branch} ({commit})" if commit else branch)
 
 
 class GitHubUpdateButton(BigButton):
