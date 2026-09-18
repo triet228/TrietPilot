@@ -2,7 +2,7 @@
 
 import threading
 
-from openpilot.selfdrive.ui.mici.layouts.settings.device import EngagedConfirmationButton
+from openpilot.selfdrive.ui.mici.layouts.settings.device.device_layout import EngagedConfirmationButton
 from openpilot.selfdrive.ui.mici.widgets.info import InfoLayoutMici
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog
